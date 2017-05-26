@@ -5,11 +5,12 @@
 
 # image selection
 IMAGE_REPO=${IMAGE_REPO:-s3p/service}
-IMAGE_TAG=${IMAGE_TAG:-v0.3}
+IMAGE_TAG=${IMAGE_TAG:-v0.4}
 IMAGE_NAME="${IMAGE_REPO}:${IMAGE_TAG}"
 
 # image configuration
-ODL_NETWORK=${ODL_NETWORK:-False}
+NAME=${HOST_NAME:-service-node}
+ODL_NETWORK=${ODL_NETWORK:-True}
 CAPABILITIES="--privileged --cap-add ALL --security-opt apparmor=docker-unconfined "
 SERVICE_HOST=${SERVICE_HOST:-192.168.3.2}
 STACK_PASS=${STACK_PASS:-stack}
@@ -28,24 +29,8 @@ HORIZON_PORT_HOST=$(( $PORT_MAP_OFFSET + $HORIZON_PORT_CONTAINER ))
 DLUX_PORT_HOST=$(( $PORT_MAP_OFFSET + $DLUX_PORT_CONTAINER ))
 VNC_PORT_HOST=$(( $PORT_MAP_OFFSET + $VNC_PORT_CONTAINER ))
 PORT_MAP="-p ${HORIZON_PORT_HOST}:${HORIZON_PORT_CONTAINER} -p ${DLUX_PORT_HOST}:${DLUX_PORT_CONTAINER} -p ${VNC_PORT_HOST}:${VNC_PORT_CONTAINER} "
-NETWORK_NAME=${NETWORK_NAME:-"mgmt-net"}
+NETWORK_NAME=${NETWORK_NAME:-"overlay-net"}
 NETWORK_SETTINGS="--net=$NETWORK_NAME $PORT_MAP"
-
-NAME=${HOST_NAME:-service-node}
-# TODO: the following section, up to the "run" seems unnecessary
-CONF_FILE="$(pwd)/service.odl.local.conf"
-if [ "$ODL_NETWORK" = "False" ] ; then
-    CONF_FILE="$(pwd)/service.ovs.local.conf"
-    echo "Using OVS-ML2 (Neutron) local.conf ($CONF_FILE}"
-else
-    echo "Using OpenDaylight-ML2 for local.conf ($CONF_FILE})"
-fi
-if [ -n "$1" ] ; then
-    # if a command is specified as an argument to the script, use it,
-    # else, default to the CMD defined in the Dockerfile
-    echo "Command argument supplied, running \"$1\" in $NAME..."
-    COMMAND="$1"
-fi
 
 echo "Starting up docker container from image ${IMAGE_NAME}"
 echo "name: $NAME"
@@ -55,6 +40,8 @@ docker run -dit --name ${NAME} --hostname ${NAME} --env TZ=America/Los_Angeles \
     --env no_proxy=$_no_proxy \
     --env ODL_NETWORK=$ODL_NETWORK \
     --env STACK_PASS=$STACK_PASS \
+    --env SERVICE_HOST=$SERVICE_HOST \
+    --env container=docker \
     $NETWORK_SETTINGS \
     $MOUNTS \
     $CAPABILITIES \
@@ -62,12 +49,19 @@ docker run -dit --name ${NAME} --hostname ${NAME} --env TZ=America/Los_Angeles \
     /sbin/init
 
 CONTAINER_SHORT_ID=$(docker ps -aqf "name=${NAME}")
-# NOTE: if 'docker exec' is used immediately after the container launching,
-# +the docker daemon will throw an error to the effect of "container not started"
-# This is likely due to systemd initialization latency.
-# waiting a few (?) seconds to launch bash or stack will allow 'docker exec' to succeed
-# TODO: docker ps -f "ready" or some kind of  watch for container "readiness"
-#echo "sleeping to allow systemd to wake up"
-#sleep 5
-#docker exec -it $CONTAINER_SHORT_ID su -c "/bin/bash" stack
+STATUS=$(docker exec -it $CONTAINER_SHORT_ID grep "^State" /proc/1/status)
+while ! ( echo $STATUS | grep "sleeping" )  ; do
+    echo "Waiting for init system to complete initialization on container $NAME ... "
+    STATUS=$(docker exec -it $CONTAINER_SHORT_ID grep "^State" /proc/1/status)
+    sleep 1
+done
+
+AUTO_STACK=${1:-no}
+# passing an argument of "yes" to run_service.sh will auto-stack
+if [[ "$AUTO_STACK" == "yes" ]] ; then
+    COMMAND='su -c "/home/stack/start.sh" stack'
+else
+    COMMAND='/bin/bash'
+fi
+docker exec -it $CONTAINER_SHORT_ID "$COMMAND"
 
