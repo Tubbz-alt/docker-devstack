@@ -9,24 +9,26 @@ net_id=$(openstack network show private -f shell --prefix net_ | grep "net_id" |
 # create servers
 FLAVOR="m1.tiny"
 IMAGE="cirros-0.3.4-x86_64-uec"
+DEBUG=off
 
 function create_server {
     if [ -z "$1" ] ; then
         echo "ERROR: A server ID nust be supplied"
     else
         ID="$1"
-        export SERVER_NAME="test-${ID}"
+        SERVER_NAME="tenant-${ID}"
         ZONE=""
+        PARENT_NODE="random"
         if [ -n "$2" ] ; then
             # specify zone if parent node is supplied
             PARENT_NODE="${2}"
+            PARENT_NODE_ID=${PARENT_NODE#compute-}
+            SERVER_NAME="tenant-${PARENT_NODE_ID}-${ID}"
             ZONE="--availability-zone nova:${PARENT_NODE}"
         fi
-        if [ -z "$(openstack server list | grep "$SERVER_NAME" )" ] ; then
-            echo "Creating server instance ${SERVER_NAME} on host ${PARENT_NODE} with flavor ${FLAVOR}"
+        echo "[$(date)] Creating server instance ${SERVER_NAME} on host ${PARENT_NODE} with flavor ${FLAVOR}"
+        if [ "$DEBUG" == "off" ] ; then
             openstack server create --flavor $FLAVOR --image $IMAGE $ZONE --nic net-id=$net_id $SERVER_NAME
-        else
-            echo "ERROR: a server already exists with the name \"$SERVER_NAME\""
         fi
     fi
 }
@@ -45,31 +47,45 @@ function nsenter {
     # usage: nsenter [ IPNETNS ]
     if [ -z "$1" ] ; then
         NETNS=$(ip netns ls | grep dhcp )
-	echo "No netns supplied as argument, using NETNS=$NETNS"
+        echo "No netns supplied as argument, using NETNS=$NETNS"
     else
         NETNS=$1
-	echo "A netns was supplied as argument, using NETNS=$NETNS"
+        echo "A netns was supplied as argument, using NETNS=$NETNS"
     fi
     sudo ip netns exec $NETNS /bin/bash
 }
 
+SERVERS_PER_HOST=2
 if [[ "$0" == *"bash"* ]] ; then 
     echo "Functions available in /home/stack/create_servers.sh:"
     grep function /home/stack/create_servers.sh | cut -d ' ' -f2 
 else
-    HOST_ID="n28"
+    # ALL_SERVERS=$(openstack openstack hypervisor list -f csv | cut -d '' -f2 )
+    # echo $ALL_SERVERS
+    for hypervisor in $(openstack hypervisor list -f value | cut -d ' ' -f2 ) ; do
+        # openstack hypervisor show $hypervisor
+        HOST_ZONE="${hypervisor}"
+        for (( TENANT_INDEX=2; TENANT_INDEX<=${SERVERS_PER_HOST} ; TENANT_INDEX++ )); do
+            create_server $TENANT_INDEX $HOST_ZONE
+            if [ "$DEBUG" == "off" ] ; then
+                echo "Sleeping for 60 seconds to give time for tenants to spin up"
+                sleep 60
+            fi
+        done
+    done
+    # HOST_ID="n28"
 
-    ID=1
-    HOST_ZONE="compute-${HOST_ID}-001"
-    create_server "$(printf "%.3d" $ID)"   # "$HOST_ZONE"
-    openstack server show $SERVER_NAME
+    # ID=1
+    # HOST_ZONE="compute-${HOST_ID}-001"
+    # create_server "$(printf "%.3d" $ID)"   # "$HOST_ZONE"
+    # openstack server show $SERVER_NAME
 
-    ID=2
-    HOST_ZONE="compute-${HOST_ID}-002"
-    create_server "$(printf "%.3d" $ID)"   # "$HOST_ZONE"
-    openstack server show $SERVER_NAME
-    #ID=$(( $ID + 1 ))
-    #create_server "$(printf "%.3d" $ID)" "compute-o17-002"
+    # ID=2
+    # HOST_ZONE="compute-${HOST_ID}-002"
+    # create_server "$(printf "%.3d" $ID)"   # "$HOST_ZONE"
+    # openstack server show $SERVER_NAME
+    # #ID=$(( $ID + 1 ))
+    # #create_server "$(printf "%.3d" $ID)" "compute-o17-002"
 fi
 
 # vim: set et sw=4 ts=4 :
