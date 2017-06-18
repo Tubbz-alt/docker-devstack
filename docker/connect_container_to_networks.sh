@@ -86,7 +86,6 @@ NETMASK_LEN=16
 
 # parse input arguments
 PHYS_HOST_NAME="$1"
-# "an11-19" # needs to be an input argument, especially for an orchestration leader
 
 CONTAINER_ID_NUMBER="${2}"
 # container name can be constructed from ID num: compute-<hostID>-<CONTAINER_ID_NUMBER>
@@ -123,6 +122,11 @@ case "$CONTAINER_TYPE" in
         echo "CONTAINER_TYPE = network"
         CONTAINER_NAME=network-node
         CONTAINER_ID_NUMBER=3
+        ;;
+    measure)
+        echo "CONTAINER_TYPE = measure"
+        CONTAINER_NAME=measure-node
+        CONTAINER_ID_NUMBER=4
         ;;
     compute)  echo "CONTAINER_TYPE = compute"
         CONTAINER_NAME="compute-${H_IXd}-${CONTAINER_ID_NUMBER}"
