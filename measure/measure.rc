@@ -1,0 +1,15 @@
+#!/bin/bash
+# image configuration
+export IMAGE_REGISTRY="matt-registry:4000"
+export IMAGE_REPO="s3p/measure"
+export IMAGE_TAG="v0.1"
+
+# OpenStack Config
+export ODL_NETWORK=True
+export HOST_NAME="measure-node"
+export SERVICE_HOST="10.129.19.2"
+export SERVICE_HOST_NAME=service-node
+
+export DOCKERFILE="measure.Dockerfile"
+# vim: set ft=sh :
+
