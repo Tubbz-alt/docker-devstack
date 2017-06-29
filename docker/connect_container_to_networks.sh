@@ -5,7 +5,7 @@
 # 3) add the peer to a docker container netns
 # 4) set its IP address
 
-set -e 
+set -e
 
 function fn_usage {
     echo "Usage:"
@@ -93,8 +93,7 @@ CONTAINER_ID_NUMBER="${2}"
 CONTAINER_TYPE=${3}
 
 # determine subnet from bridge
-# TODO: management subnet first, then create data network attachment
-# PHYS_BRIDGE_NAME=br_data 
+# PHYS_BRIDGE_NAME=br_data
 # ADAPTER_IX="2"
 # SUBNET_BASE="10.130"
 
@@ -107,22 +106,27 @@ H_IXx=${H_IXx:-$(printf "%.2x" $H_IXd)}
 SUBNET_SEGMENT="${H_IXd}"
 
 
-# For last octet of IP address: 
+# For last octet of IP address:
 # host=1, service=2, network=3, compute=11-200, floatingIP=201-254
 case "$CONTAINER_TYPE" in
-    host) 
+    host)
         echo "Host is already attached to network bridge:"
         exit
         ;;
-    service) 
+    service)
         echo "CONTAINER_TYPE = service"
         CONTAINER_NAME=service-node
         CONTAINER_ID_NUMBER=2
         ;;
-    network) 
+    network)
         echo "CONTAINER_TYPE = network"
         CONTAINER_NAME=network-node
         CONTAINER_ID_NUMBER=3
+        ;;
+    measure)
+        echo "CONTAINER_TYPE = measure"
+        CONTAINER_NAME=measure-node
+        CONTAINER_ID_NUMBER=4
         ;;
     compute)  echo "CONTAINER_TYPE = compute"
         CONTAINER_NAME="compute-${H_IXd}-${CONTAINER_ID_NUMBER}"
@@ -132,9 +136,9 @@ case "$CONTAINER_TYPE" in
         exit
 esac
 
-# description: 
+# description:
 # input: container type (string), "ID"  (int, 11-200) supplied on the command line
-#   this script will: 
+#   this script will:
 # 1) link the container to both br_mgmt and br_data
 # 2) modify their MAC addresses accordingly
 # 3) supply IP addresse
@@ -148,17 +152,17 @@ C_IXd=$CONTAINER_ID_NUMBER
 C_IXx=$(printf "%.2x" $C_IXd)
 
 # connect the adapter
-for ADAPTER_IX in {1..2}; do 
+for ADAPTER_IX in {1..2}; do
     A_IX="$(printf "%.2x" $ADAPTER_IX)"
     case "$ADAPTER_IX" in
-        1) 
+        1)
             # create links to the management bridge
-            PHYS_BRIDGE_NAME=br_mgmt 
+            PHYS_BRIDGE_NAME=br_mgmt
             SUBNET_BASE="10.129"
             ;;
-        2) 
+        2)
             # create links to the tenant/data bridge
-            PHYS_BRIDGE_NAME=br_data 
+            PHYS_BRIDGE_NAME=br_data
             SUBNET_BASE="10.130"
             ;;
         *)  echo "ERROR: Invalid ADAPTER_IX \"$ADAPTER_IX\" specified"
@@ -166,18 +170,16 @@ for ADAPTER_IX in {1..2}; do
     esac
     SUBNET_PREFIX="${SUBNET_BASE}.${SUBNET_SEGMENT}"
     # container index (container id per host), convert to 2 hex digits
-    # TODO: need a place to keep track of the available indices (although they should increase monotonically from 2 to 256
     CONTAINER_IP="${SUBNET_PREFIX}.${C_IXd}/${NETMASK_LEN}"
     CONTAINER_MAC="${MAC_PREFIX}:${H_IXx}:${C_IXx}:${A_IX}"
-    
+
     # make links
     fn_create_and_link_veth
-    fn_display_link_status 
+    fn_display_link_status
 done
 
 echo "You can remove the links created just now by simply removing the veth peer from the root netns with:"
 echo "    ip link delete $VETH_HOST"
 
-# TODO: link the second bridge to the container here.
 unlink $HOST_NETNS_ROOT/$NETNS_NAME
 
