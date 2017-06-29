@@ -8,7 +8,7 @@ function fn_wait_for_tenant {
         TENANT_NAME=$1
         TENANT_IP=""
         SECONDS=0
-        while [ -z "$TENANT_IP" ] ; do 
+        while [ -z "$TENANT_IP" ] ; do
             echo "Waiting for \"$TENANT_NAME\" to obtain an IP address..."
             TENANT_IP=$(openstack server show -f value -c addresses ${TENANT_NAME}  | cut -d "=" -f 2)
             sleep 0.1
@@ -25,7 +25,7 @@ function fn_wait_for_tenant {
         echo
     else
         echo "MOCKUP: waiting for server to oibtain an IP..."
-        sleep 2 
+        sleep 2
     fi
     echo
 }
@@ -46,7 +46,7 @@ function fn_create_instance {
         if [ "$DEBUG" == "off" ] ; then
             openstack server create --flavor $FLAVOR --security-group $S3P_SEC_GRP --image $IMAGE $ZONE --nic net-id=$NETWORK_ID $SERVER_NAME
         fi
- 
+
 }
 
 function fn_set_quotas {
@@ -56,7 +56,7 @@ function fn_set_quotas {
     fi
 }
 
-# defaults: 
+# defaults:
 FLAVOR="cirros256"
 IMAGE="cirros-0.3.4-x86_64-uec"
 DEBUG=off
@@ -67,8 +67,8 @@ NETWORK_ID=$(openstack network list | grep $NETWORK_NAME | cut -d '|' -f 2 | tr 
 NETNS=$(ip netns ls | grep $NETWORK_ID)
 fn_set_quotas
 for (( TENANT_INDEX=1; TENANT_INDEX<=${SERVERS_PER_HOST} ; TENANT_INDEX++ )); do
-    for HYPERVISOR in $(openstack hypervisor list | grep compute | cut -d '|' -f3 | tr -d ' '); do 
-        fn_create_instance $TENANT_INDEX $HYPERVISOR 
+    for HYPERVISOR in $(openstack hypervisor list | grep compute | cut -d '|' -f3 | tr -d ' '); do
+        fn_create_instance $TENANT_INDEX $HYPERVISOR
         fn_wait_for_tenant $SERVER_NAME
     done
 done

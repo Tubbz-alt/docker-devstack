@@ -33,7 +33,6 @@ RUN     git clone https://git.openstack.org/openstack-dev/devstack /home/stack/d
 
 # copy local.conf & scripts
 COPY    compute.odl.local.conf /home/stack/compute.odl.local.conf
-COPY    compute.ovs.local.conf /home/stack/compute.ovs.local.conf
 # TODO: copy in scripts that "wait for service node availablity (query openstack?)"
 COPY    start.sh /home/stack/start.sh
 COPY    restart.sh /home/stack/restart.sh

@@ -8,7 +8,7 @@
 # image selection
 IMAGE_REGISTRY=${IMAGE_REGISTRY:-"matt-registry:4000"}
 IMAGE_REPO=${IMAGE_REPO:-s3p/compute}
-IMAGE_TAG=${IMAGE_TAG:-v0.5} # env
+IMAGE_TAG=${IMAGE_TAG:-v0.5}
 IMAGE_NAME="${IMAGE_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}"
 
 # image configuration
@@ -24,11 +24,10 @@ MOUNTS="-v /dev:/dev -v /lib/modules:/lib/modules $CGROUP_MOUNT $SYSTEMD_ENABLIN
 STACK_USER=${STACK_USER:-stack}
 STACK_PASS=${STACK_PASS:-stack}
 ODL_NETWORK=${ODL_NETWORK:-True}
-SERVICE_HOST_NAME=service-node
 SERVICE_HOST=${SERVICE_HOST:-10.129.19.2}
 NO_PROXY=localhost,10.0.0.0/8,192.168.0.0/16,172.17.0.0/16,127.0.0.1,127.0.0.0/8,$SERVICE_HOST
 
-docker run -dit --name ${NAME} --hostname ${NAME} \
+docker run -dit --name ${NAME} --hostname ${NAME} --env TZ=America/Los_Angeles \
     --env http_proxy=$http_proxy --env https_proxy=$https_proxy \
     --env no_proxy=$NO_PROXY \
     --env ODL_NETWORK=$ODL_NETWORK \
