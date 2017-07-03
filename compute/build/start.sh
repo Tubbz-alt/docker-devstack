@@ -16,11 +16,11 @@ TAG_NAME="origin/${BRANCH_NAME}"
 echo "stack:$STACK_PASS" | sudo chpasswd
 
 # get container IP
-ip=`/sbin/ip -o -4 addr list eth0 | awk '{print $4}' | cut -d/ -f1`
+ip=`/sbin/ip -o -4 addr list ethphys01 | awk '{print $4}' | cut -d/ -f1`
 
 # remove OVS db (for case of restacking a node to regenerate UUID)
 sudo rm -rf /etc/openvswitch/conf.db
-#  recreate machine-id for EACH compute node in start.sh 
+#  recreate machine-id for EACH compute node in start.sh
 # systemd-machine-id-setup # creates new UUID in /etc/machine-id
 
 # remove any dead screen sessions from previous stacking
@@ -52,6 +52,8 @@ $DEVSTACK_HOME/stack.sh
 if [ $? = 0 ] ; then
     echo "$(hostname) stacking successful at $(date)" >> stacking.status
     /home/stack/devstack/tools/info.sh >> stacking.status
+    sed -i "s/^#.*\(OFFLINE=True\)/\1/g" /home/stack/$SRC_CONF
+    sed -i "s/^#.*\(RECLONE=False\)/\1/g" /home/stack/$SRC_CONF
 fi
 
 # vim set et ts=4 sw=4 :

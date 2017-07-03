@@ -33,15 +33,17 @@ RUN     git clone https://git.openstack.org/openstack-dev/devstack /home/stack/d
 
 # copy local.conf & scripts
 COPY    compute.odl.local.conf /home/stack/compute.odl.local.conf
-COPY    compute.ovs.local.conf /home/stack/compute.ovs.local.conf
-# TODO: copy in scripts that "wait for service node availablity (query openstack?)"
+COPY    wait_for_networks.sh /home/stack/wait_for_networks.sh
 COPY    start.sh /home/stack/start.sh
 COPY    restart.sh /home/stack/restart.sh
 RUN     chown -R stack:stack /home/stack && \
         chmod 766 /home/stack/start.sh && \
-        chmod 766 /home/stack/restart.sh
+        chmod 766 /home/stack/restart.sh && \
+        chmod 766 /home/stack/wait_for_networks.sh
 
 WORKDIR /home/stack
+
+LABEL "nodetype=compute" "version=v0.5" "ODL_RELEASE=carbon-snapshot-0.6.1"
 
 # vim: set ft=dockerfile sw=4 ts=4 :
 
