@@ -11,7 +11,7 @@ FLAVOR="m1.tiny"
 IMAGE="cirros-0.3.4-x86_64-uec"
 DEBUG=off
 
-function create_server {
+function s3p_create_server {
     if [ -z "$1" ] ; then
         echo "ERROR: A server ID nust be supplied"
     else
@@ -43,7 +43,7 @@ function create_security_group_rules {
     openstack security group rule create --egress --protocol ICMP $SEC_GRP_ID
 }
 
-function nsenter {
+function s3p_nsenter {
     # usage: nsenter [ IPNETNS ]
     if [ -z "$1" ] ; then
         NETNS=$(ip netns ls | grep dhcp )
@@ -56,9 +56,9 @@ function nsenter {
 }
 
 SERVERS_PER_HOST=2
-if [[ "$0" == *"bash"* ]] ; then 
+if [[ "$0" == *"bash"* ]] ; then
     echo "Functions available in /home/stack/create_servers.sh:"
-    grep function /home/stack/create_servers.sh | cut -d ' ' -f2 
+    grep function /home/stack/create_servers.sh | cut -d ' ' -f2
 else
     # ALL_SERVERS=$(openstack openstack hypervisor list -f csv | cut -d '' -f2 )
     # echo $ALL_SERVERS
@@ -66,7 +66,7 @@ else
         # openstack hypervisor show $hypervisor
         HOST_ZONE="${hypervisor}"
         for (( TENANT_INDEX=2; TENANT_INDEX<=${SERVERS_PER_HOST} ; TENANT_INDEX++ )); do
-            create_server $TENANT_INDEX $HOST_ZONE
+            s3p_create_server $TENANT_INDEX $HOST_ZONE
             if [ "$DEBUG" == "off" ] ; then
                 echo "Sleeping for 60 seconds to give time for tenants to spin up"
                 sleep 60
@@ -77,15 +77,15 @@ else
 
     # ID=1
     # HOST_ZONE="compute-${HOST_ID}-001"
-    # create_server "$(printf "%.3d" $ID)"   # "$HOST_ZONE"
+    # s3p_create_server "$(printf "%.3d" $ID)"   # "$HOST_ZONE"
     # openstack server show $SERVER_NAME
 
     # ID=2
     # HOST_ZONE="compute-${HOST_ID}-002"
-    # create_server "$(printf "%.3d" $ID)"   # "$HOST_ZONE"
+    # s3p_create_server "$(printf "%.3d" $ID)"   # "$HOST_ZONE"
     # openstack server show $SERVER_NAME
     # #ID=$(( $ID + 1 ))
-    # #create_server "$(printf "%.3d" $ID)" "compute-o17-002"
+    # #s3p_create_server "$(printf "%.3d" $ID)" "compute-o17-002"
 fi
 
 # vim: set et sw=4 ts=4 :
