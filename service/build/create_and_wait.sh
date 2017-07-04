@@ -10,15 +10,15 @@ function fn_wait_for_tenant {
         SECONDS=0
         while [ -z "$TENANT_IP" ] ; do
             echo "Waiting for \"$TENANT_NAME\" to obtain an IP address..."
-            TENANT_IP=$(openstack server show -f value -c addresses ${TENANT_NAME}  | cut -d "=" -f 2)
             sleep 0.1
+            TENANT_IP=$(openstack server show -f value -c addresses ${TENANT_NAME}  | cut -d "=" -f 2)
         done
         echo "[$(fn_isodate)] $SECONDS s for OpenStack server API to return an IP address for $TENANT_IP"
         SECONDS=0
         sudo ip netns exec ${NETNS} ping -c 1 -W 1 $TENANT_IP
         while [ "$?" != 0 ] ; do
-            sudo ip netns exec ${NETNS} ping -c 1 -W 1 $TENANT_IP > /dev/null
             sleep 0.1
+            sudo ip netns exec ${NETNS} ping -c 1 -W 1 $TENANT_IP > /dev/null
         done
         sudo ip netns exec ${NETNS} ping -c 1 -W 1 $TENANT_IP
         echo "[$(fn_isodate)]  $SECONDS s for OpenStack server  \"$TENANT_IP\" to respond to ping"
@@ -52,8 +52,6 @@ function fn_create_instance {
             openstack server show $SERVER_NAME
             echo
         fi
-
-
 }
 
 function fn_set_quotas {
@@ -70,12 +68,13 @@ DEBUG=off
 S3P_SEC_GRP="s3p_secgrp"
 SERVERS_PER_HOST=2
 NETWORK_NAME=private
-NETWORK_ID=$(openstack network list | grep $NETWORK_NAME | cut -d '|' -f 2 | tr -d ' ')
+NETWORK_ID=$(openstack network show -f value -c id $NETWORK_NAME)
 NETNS=$(ip netns ls | grep $NETWORK_ID)
 fn_set_quotas
 SERVER_LIST="$(openstack server list -f value -c Name)"
+HYPERVISOR_LIST=$(openstack compute service list --service nova-compute -f value -c Host -c Status | grep enabled | cut -d ' ' -f 1)
 for (( TENANT_INDEX=1; TENANT_INDEX<=${SERVERS_PER_HOST} ; TENANT_INDEX++ )); do
-    for HYPERVISOR in $(openstack hypervisor list | grep compute | cut -d '|' -f3 | tr -d ' '); do
+    for HYPERVISOR in $HYPERVISOR_LIST; do
         fn_create_instance $TENANT_INDEX $HYPERVISOR
         fn_wait_for_tenant $SERVER_NAME
     done
