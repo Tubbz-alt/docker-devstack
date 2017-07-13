@@ -1,6 +1,6 @@
 #!/bin/bash
 function fn_isodate {
-	date "+%Y-%m-%d %H:%M:%S"
+    date "+%Y-%m-%d %H:%M:%S"
 }
 
 function fn_wait_for_tenant {
@@ -8,23 +8,24 @@ function fn_wait_for_tenant {
         TENANT_NAME=$1
         TENANT_IP=""
         SECONDS=0
-        while [ -z "$TENANT_IP" ] ; do 
+        while [ -z "$TENANT_IP" ] ; do
             echo "Waiting for \"$TENANT_NAME\" to obtain an IP address..."
-            TENANT_IP=$(openstack server show -f value -c addresses ${TENANT_NAME}  | cut -d "=" -f 2)
             sleep 0.1
+            TENANT_IP=$(openstack server show -f value -c addresses ${TENANT_NAME}  | cut -d "=" -f 2)
         done
         echo "[$(fn_isodate)] $SECONDS s for OpenStack server API to return an IP address for $TENANT_IP"
         SECONDS=0
         sudo ip netns exec ${NETNS} ping -c 1 -W 1 $TENANT_IP
         while [ "$?" != 0 ] ; do
-            sudo ip netns exec ${NETNS} ping -c 1 -W 1 $TENANT_IP > /dev/null
             sleep 0.1
+            sudo ip netns exec ${NETNS} ping -c 1 -W 1 $TENANT_IP > /dev/null
         done
         sudo ip netns exec ${NETNS} ping -c 1 -W 1 $TENANT_IP
         echo "[$(fn_isodate)]  $SECONDS s for OpenStack server  \"$TENANT_IP\" to respond to ping"
         echo
     else
         echo "MOCKUP: waiting for server to obtain an IP..."
+        sleep 2
     fi
     echo
 }
@@ -41,9 +42,20 @@ function fn_create_instance {
         SERVER_NAME="tenant-${PARENT_NODE_ID}-${ID}"
         ZONE="--availability-zone nova:${PARENT_NODE}"
     fi
-    echo "[$(fn_isodate)] Creating server instance ${SERVER_NAME} on host ${PARENT_NODE} with flavor ${FLAVOR}"
-    if [ "$DEBUG" == "off" ] ; then
-        openstack server create --flavor $FLAVOR --security-group $S3P_SEC_GRP --image $IMAGE $ZONE --nic net-id=$NETWORK_ID $SERVER_NAME
+    if [ -z "$(echo $SERVER_LIST | grep $SERVER_NAME)" ] ; then
+        echo "[$(fn_isodate)] Creating server instance ${SERVER_NAME} on host ${PARENT_NODE} with flavor ${FLAVOR}"
+        if [ "$DEBUG" == "off" ] ; then
+            openstack server create --flavor $FLAVOR --security-group $S3P_SEC_GRP --image $IMAGE $ZONE --nic net-id=$NETWORK_ID $SERVER_NAME
+        fi
+        fn_wait_for_tenant $SERVER_NAME
+    else
+        echo "[$(fn_isodate)] WARNING: An instance with name \"${SERVER_NAME}\" already exists, skipping"
+        if [ "$VALIDATE_EXISTING" == "on" ] ; then
+            # ping an existing server
+            openstack server show $SERVER_NAME
+            echo
+            fn_wait_for_tenant $SERVER_NAME
+        fi
     fi
 }
 
@@ -90,7 +102,7 @@ function fn_set_quotas {
 	SUBNETS_PER_NETWORK=2
 	MAX_PORTS=$(( $MAX_NETWORKS * $PORTS_PER_NETWORK ))
 	MAX_SUBNETS=$(( $MAX_NETWORKS * $SUBNETS_PER_NETWORK ))
-	
+
     if [ "$DEBUG" == "off" ] ; then
         echo "[$(fn_isodate)] Setting OpenStack quotas..."
         openstack quota set --instances $MAX_PORTS --cores $MAX_CORES \
@@ -122,11 +134,12 @@ function fn_delete_all_networks {
 	done
 }
 
-# defaults: 
-DEBUG=off
+# defaults:
 FLAVOR="cirros256"
 IMAGE="cirros-0.3.4-x86_64-uec"
 PROJECT_NAME=demo
+DEBUG=off
+VALIDATE_EXISTING=off
 S3P_SEC_GRP="s3p_secgrp"
 S3P_NET_PREFIX="s3p-net-"
 S3P_TENANT_PREFIX="tenant-"
@@ -150,8 +163,10 @@ else
 
 	fn_set_quotas
 	fn_create_security_group
+    SERVER_LIST="$(openstack server list -f value -c Name)"
+    HYPERVISOR_LIST=$(openstack compute service list --service nova-compute -f value -c Host -c Status | grep enabled | cut -d ' ' -f 1)
 	for (( TENANT_INDEX=1; TENANT_INDEX<=${SERVERS_PER_HOST} ; TENANT_INDEX++ )); do
-		for HYPERVISOR in $(openstack hypervisor list -f value -c "Hypervisor Hostname" | grep compute ); do 
+        for HYPERVISOR in $HYPERVISOR_LIST; do
 			if [ "$(openstack hypervisor show -f value -c status $HYPERVISOR)" == "enabled" ]; then
 				COMP_ID=${HYPERVISOR#compute-*-}
 				NODE_ID=${HYPERVISOR#compute-}
@@ -165,8 +180,7 @@ else
 					NETWORK_ID=$(openstack network show -f value -c id $NETWORK_NAME)
 				    echo -e "\n[$(fn_isodate)] INFO: Using network $NETWORK_NAME for instance"
 				fi
-				fn_create_instance $TENANT_INDEX $HYPERVISOR 
-				fn_wait_for_tenant $SERVER_NAME
+				fn_create_instance $TENANT_INDEX $HYPERVISOR
 			else
 				echo -e "\n[$(fn_isodate)] WARNING: hypervisor \"$HYPERVISOR\" is disabled: skipping.\n"
 			fi

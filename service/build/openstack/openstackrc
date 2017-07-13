@@ -1,0 +1,10 @@
+# openrc credentials file
+export OS_REGION_NAME=RegionOne
+export OS_PROJECT_NAME=demo
+export OS_IDENTITY_API_VERSION=2.0
+export OS_PASSWORD=secret
+export OS_AUTH_URL=http://10.129.19.2:5000/v2.0
+export OS_USERNAME=admin
+export OS_TENANT_NAME=demo
+export OS_VOLUME_API_VERSION=2
+export OS_NO_CACHE=1
