@@ -1,15 +1,11 @@
 #!/bin/bash
 # file: build_systemd.sh
 # info: builds a docker image with systemd
+IMAGE_REGISTRY=${IMAGE_REGISTRY:-s3p-registry:4000}
 IMAGE_REPO=${IMAGE_REPO:-s3p/systemd}
-IMAGE_TAG=${IMAGE_TAG:-latest}
-
-if [ -n "$1" ] ; then
-    # use arg as image tag if supplied
-    IMAGE_TAG="$1"
-fi
-IMAGE_NAME=${IMAGE_REPO}:${IMAGE_TAG}
-DOCKERFILE=${DOCKERFILE:-systemd.ubuntu1604.Dockerfile}
+IMAGE_TAG=${IMAGE_TAG:-v0.1}
+IMAGE_NAME=${IMAGE_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}
+DOCKERFILE=${DOCKERFILE:-Dockerfile}
 
 echo "Building $IMAGE_NAME from Dockerfile=$DOCKERFILE at $(date) ... "
 docker build -t ${IMAGE_NAME} -f ${DOCKERFILE} \
@@ -22,5 +18,6 @@ if [ $? = 0 ] ; then
     echo "docker run -it --rm --env http_proxy=$http_proxy --env https_proxy=$https_proxy --env no_proxy=$no_proxy $IMAGE_NAME bash"
 else
     echo "An error occurred during the build of $IMAGE_NAME"
+    exit 1
 fi
 
