@@ -178,14 +178,14 @@ def main():
 
     # create networks
     print("creating network")
-    network=create_network(conn,14)
-
-    hypervisor="compute-8-11"
-    server_name="ten-"+hypervisor+"-1"
-    print("Creating server {0}".format(server_name))
-    create_server(conn, server_name, hypervisor, network )
-    print("Listing servers")
-    list_servers(conn)
+    for ix in range(1,7):
+        network=create_network(conn,ix)
+        hypervisor="compute-8-"+str(ix+10)
+        server_name="s3p-"+hypervisor+"-1"
+        print("Creating server {0}".format(server_name))
+        create_server(conn, server_name, hypervisor, network )
+        print("Listing servers")
+        list_servers(conn)
     # list_servers(conn)
     # list_images(conn)
     # list_flavors(conn)
