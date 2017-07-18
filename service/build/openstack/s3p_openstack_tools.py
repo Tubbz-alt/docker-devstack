@@ -5,20 +5,13 @@ from openstack import connection
 import errno
 import os
 
-# TODO: replace these variables in the "create server" section
-#  from examples.connect import FLAVOR_NAME
-#  from examples.connect import IMAGE_NAME
-#  from examples.connect import KEYPAIR_NAME
-#  from examples.connect import NETWORK_NAME
-#  from examples.connect import PRIVATE_KEYPAIR_FILE
-#  from examples.connect import SERVER_NAME
-#  from examples.connect import SSH_DIR
-
 FLAVOR_NAME='cirros256'
 SEC_GRP_NAME='s3p_secgrp'
 IMAGE_NAME='cirros-0.3.4-x86_64-uec'
-NETWORK_NAME='private'
 debug_mode=False
+default_image=""
+default_flavor=""
+default_secgrp=""
 
 
 """
@@ -49,12 +42,15 @@ def list_keypairs(conn):
     for keypair in conn.compute.keypairs():
         print(keypair)
 
-def list_comp_availability_zones(conn):
-    print("List availability zones:")
-    pass
-    # the following results in:  KeyError: ''
-    # for zone in conn.compute.availability_zones():
-    #     print(zone)
+def list_hypervisors(conn):
+    print("List hypervisor:")
+    for hypervisor in conn.compute.hypervisors():
+        print(hypervisor)
+
+def list_project_id(conn):
+    print("List project id's:")
+    for project in conn.identityv2.projects():
+        print(project)
 
 """
 List resources from the network service.
@@ -91,10 +87,12 @@ def list_net_availability_zones(conn):
 
 """
 Create a project network and subnet.
-This network can be used when creating a server and allows the server to 
+This network can be used when creating a server and allows the server to
 communicate with others servers on the same project network.
 """
-def create_network(conn, network_name):
+def create_network(conn, network_index):
+    basename="s3p-net-"
+    network_name=basename+str(network_index)
     print("Create Network:")
 
     example_network = conn.network.create_network(
@@ -103,13 +101,14 @@ def create_network(conn, network_name):
     print(example_network)
 
     example_subnet = conn.network.create_subnet(
-        name=network_name+'-subnet',
+        name=network_name+'-sub',
         network_id=example_network.id,
         ip_version='4',
-        cidr='10.0.2.0/24',
-        gateway_ip='10.0.2.1')
+        cidr='10.0.'+str(network_index)+'.0/24',
+        gateway_ip='10.0.'+str(network_index)+'.1')
 
     print(example_subnet)
+    return example_network
 
 
 def delete_network(conn, network_name):
@@ -127,37 +126,31 @@ def delete_network(conn, network_name):
 Create resources
 """
 
-def create_server(conn, SERVER_NAME, compute_host):
-    print("Create Server:")
-    image = conn.compute.find_image(IMAGE_NAME)
-    print("Image ID for Image {0} = {1}".format(IMAGE_NAME,image.id))
-    flavor = conn.compute.find_flavor(FLAVOR_NAME)
-    print("Flavor ID for flavor {0} = {1}".format(FLAVOR_NAME,flavor.id))
-    network = conn.network.find_network(NETWORK_NAME)
-    print("Network ID for network {0} = {1}".format(NETWORK_NAME,network.id))
-    secgrp = conn.network.find_security_group(SEC_GRP_NAME)
-    print("Security Group ID for '{0}' = {1}".format(SEC_GRP_NAME, secgrp.id))
+def create_server(conn, s3p_server_name, s3p_hypervisor, s3p_network):
+    global default_image
+    global default_flavor
+    global default_secgrp
+    print("Image ID for Image {0} = {1}".format(IMAGE_NAME,default_image.id))
+    print("Flavor ID for flavor {0} = {1}".format(FLAVOR_NAME,default_flavor.id))
+    print("Security Group ID for '{0}' = {1}".format(SEC_GRP_NAME, default_secgrp.id))
+
+
     # keypair = create_keypair(conn)
 
     if not(debug_mode):
-        if compute_host != None:
-            # TODO: check that compute_host is a valid hypervisor
-            zone="nova:"+compute_host
-        print(zone)
+        compute_host = conn.compute.find_hypervisor(s3p_hypervisor)
+        print("compute_host={0}".format(compute_host))
         server = conn.compute.create_server(
-            name=SERVER_NAME, image_id=image.id, flavor_id=flavor.id,
-            networks=[{"uuid": network.id}]) 
-            # availability_zone=compute_host )
-            #,security_groups=secgrp.id)
-        # , key_name=keypair.name)
-
+            name=s3p_server_name, image_id=default_image.id, flavor_id=default_flavor.id,
+            hypervisor=compute_host,
+            security_groups=[{"name":default_secgrp.name}],
+            networks=[{"uuid": s3p_network.id}])
         server = conn.compute.wait_for_server(server)
-
         print("Server IP address={ip}".format(ip=server.addresses))
 
 def get_openstack_connection():
     auth_args = {
-        'auth_url': 'http://10.129.20.2:5000/v2.0',
+        'auth_url': 'http://10.129.18.2:5000/v2.0',
         'project_name': 'demo',
         'username': 'admin',
         'password': 'secret',
@@ -167,15 +160,30 @@ def get_openstack_connection():
     return conn
 
 def main():
+    global default_image
+    global default_flavor
+    global default_secgrp
     print("Obtaining credentials")
     conn = get_openstack_connection()
-    print("Listing Images: ")
-    list_images(conn)
 
-    print("Listing servers")
-    list_servers(conn)
-    # print("Creating server...")
-    # create_server(conn)
+    # get defaults
+    default_image = conn.compute.find_image(IMAGE_NAME)
+    print(default_image)
+    print("Image ID for Image {0} = {1}".format(IMAGE_NAME,default_image.id))
+    default_flavor = conn.compute.find_flavor(FLAVOR_NAME)
+    print(default_flavor)
+    print("Flavor ID for flavor {0} = {1}".format(FLAVOR_NAME,default_flavor.id))
+    default_secgrp = conn.network.find_security_group(SEC_GRP_NAME)
+    print("Security Group ID for '{0}' = {1}".format(SEC_GRP_NAME, default_secgrp.id))
+
+    # create networks
+    print("creating network")
+    network=create_network(conn,14)
+
+    hypervisor="compute-8-11"
+    server_name="ten-"+hypervisor+"-1"
+    print("Creating server {0}".format(server_name))
+    create_server(conn, server_name, hypervisor, network )
     print("Listing servers")
     list_servers(conn)
     # list_servers(conn)
