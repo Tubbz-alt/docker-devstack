@@ -1,79 +1,54 @@
 # docker-devstack
 
-Dockerfile and supporting files for fully functional dockerized Openstack nodes for S3P Testing (scale, stability, performance, security) of SDN controller used as network virtualization layer for OpenStack.
+Dockerfile and supporting files for fully functional dockerized Openstack nodes for S3P Testing (scale, stability, performance, security) of OpenDaylight SDN controller used as network virtualization layer for OpenStack.
 ---
 ## Steps to set up an S3P cluster:
-1. Select four systems (Make sure each system has enough RAM > 128 GB):  
-  Host num - Services
-  * 1 - control node
-  * 2 - compute node
-  * 3 - compute node
-  * 4 - key-value server  
-
-2. Install Fedora 23 server OS in each system.  Do disk partition manually.  
-    Make sure the size of the root “/ “ is greater than 100 GiB.
-
-3. Connect to each system with 10 Gib Network adapter.
-   Configure networks (TODO: elaborate requirements)
-
-4. Install and update docker to v1.10.3 in each system.  (TODO: Docker 1.12)
-```bash
-    $ dnf install docker
-    $ dnf update docker
-```
-
-5. Install and start key-value server, a docker container consul on system four (4).
-```bash
-    $ docker pull progrium/consul
-    $ docker run -d -p 8500:8500 -h consul --name consul progrium/consul -server –bootstrap
-```
-
-6. Start docker deamon process on system one (1), and pull out control node image.
-```bash
-    $ docker daemon -D -g /var/lib/docker -H unix:// -H tcp://0.0.0.0:2376 \
-        --cluster-store=consul://<consul IP address>:8500 \
-        --cluster-advertise=<NIC interface name to consul>:2376 \
-        --storage-opt dm.basesize=60G  > /dev/null 2>&1 &
-
-    $ docker pull rzang/service:v1
-
-    $ docker images
-
-    REPOSITORY                TAG       IMAGE ID         CREATED       SIZE
-    docker.io/rzang/service   v1        7e2430884482     12 weeks ago  45.18 GB
-```
-
-7. Create control node container.
-```bash
-    $ docker run -dit -h ctlnode --name=control_node -e TZ=America/Los_Angeles \
-        -e JAVA_HOME=/usr/lib/jvm/java-8-oracle -e JAVA_MAX_MEM=16g \
-        --privileged --cap-add=ALL -v /dev:/dev -v /lib/modules:/lib/modules \
-        --net=overlay-net 7e2430884482
-```
-
-8. Create overlay network.
-```bash
-    $ docker network create -d overlay --driver overlay --subnet 10.20.0.0/22 overlay-net
-```
-
-9. Start running Openstack on the control node.
-```bash
-    $ docker exec control_node su stack /home/stack/devstack/stack.sh
-```
-
-10. Start docker daemon process on system two and system three.
-```bash
-    $ docker daemon -D -g /var/lib/docker -H unix:// -H tcp://0.0.0.0:2376 \
-        --cluster-store=consul://<consul IP address>:8500 \
-        --cluster-advertise=<NIC interface name to consul>:2376 \
-        --storage-opt dm.basesize=12G > /dev/null 2>&1 &
-```
-
-11. On system two and three, pull out compute images. Then create 200 compute
-nodes on system two and 300 compute nodes on system three.
-```bash
-    $ docker pull rzang/compute-odl:v3
-
-    $ docker pull rzang/compute:v3
-```
-
+1. Identify physical hosts. More is better for scale testing, but a single physical system can run all of the containers simultaneously
+  - service node (OpenStack infrastructure and control node)
+  - compute nodes (OpenStack compute nodes)
+2. Install Ubuntu 16.04 and docker on physical hosts
+3. Create linux bridges on hosts named br_mgmt and br_data
+  - deployment on a single physical server can leave the bridges with no physical interfaces
+    - multiple containers on one host may share the bridge
+  - for deployment on multiple physical servers, bond these bridges to network interfaces for management and tenant data, respectively
+4. Build the systemd container:
+  - `cd docker-devstack/systemd`
+  - `./build_systemd.sh`
+5. Build the service node container:
+  - `cd docker-devstack/service`
+  - edit `build_service.sh` to reflect your docker image registry
+  - `./build_service.sh [tag name]`
+6. Run the service node
+  - `./run_service.sh`
+  - the script `docker-devstack/docker/connect_container_to_networks.sh` will create veth links from the container's net-namespace to the bridges created earlier.  It will rename the container network interfaces, assign MAC & IP addresses to them.
+  - Once the service node is running, a shell should be open at the prompt `stack@service-node: $`
+7. Start stacking on the service node
+  - edit `/home/stack/service.odl.local.conf` as needed
+  - run `./start.sh`
+    - devstack will download Linux packages and pip will install necessary components, OpenStack services will be set up and after about 10-20 minutes, the OpenStack control node should be running all required OpenStack services.
+8. While the service node is stacking, build the compute node:
+  - `cd docker-devstack/compute`
+  - `./build_compute.sh`
+9. Run the compute node(s)
+  - `./run_compute.sh` to launch a compute node with default name
+  - alternatively, create variables in your shell to reflect the correct values for:
+    - `IMAGE_REGISTRY`
+    - `IMAGE_REPO`
+    - `IMAGE_TAG`
+    - `HOST_ID` (an integer representing the physical host)
+    - `COMP_ID` (an integer  > 11 representing the compute host)
+      - the COMP_ID should be greater than 11 because it will also be encoded in the IP and MAC addresses
+10. Once the service node has finished devstack, begin stacking in the compute hosts
+  - `/home/stack/start.sh`
+  - The first time a compute host has stacked, it should take more than 10 minutes
+  - After a successful stacking, uncomment the `OFFLINE=True` and  `RECLONE=False` directives in compute.odl.local.conf
+    - subsequent restarts (`/home/stack/restart.sh`) should only require about 20 seconds
+11. Clean the containers after a successful stack
+  - `docker-devstack/service/stop_and_clean_container.sh <Node name>`
+    - <Node name> here is the name of the container e.g. service-node or compute-10-22
+12. Commit a stacked and cleaned container for faster deployment
+  - See https://docs.docker.com/engine/reference/commandline/commit/
+  - `docker commit [OPTIONS] CONTAINER [REPOSITORY[:TAG]]`
+13. Interact with the OpenStack Horizon GUI
+  - through a docker port map at http://<physical_host_IP>:50080/dashboard
+  - on the command line of any openstack node

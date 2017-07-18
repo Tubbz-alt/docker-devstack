@@ -9,7 +9,8 @@ set -e
 
 function fn_usage {
     echo "Usage:"
-    echo "connect_container_to_networks.sh <bridge name> <container ID> <adapter_index>"
+    echo "connect_container_to_networks.sh <bridge name> <container ID> <container type>"
+    echo "  where container type is one of {compute, service, measure}
     echo
 }
 
