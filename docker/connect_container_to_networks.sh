@@ -128,7 +128,8 @@ case "$CONTAINER_TYPE" in
         CONTAINER_NAME=measure-node
         CONTAINER_ID_NUMBER=4
         ;;
-    compute)  echo "CONTAINER_TYPE = compute"
+    compute)
+        echo "CONTAINER_TYPE = compute"
         CONTAINER_NAME="compute-${H_IXd}-${CONTAINER_ID_NUMBER}"
         echo "Compute node # = $CONTAINER_ID_NUMBER"
         ;;
