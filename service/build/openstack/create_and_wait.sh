@@ -72,7 +72,7 @@ function fn_create_instance {
 }
 
 function fn_determine_net_index {
-    TYPE=modulo_num_networks
+    TYPE=one_per_physhost
     case "$TYPE" in
         modulo_num_networks)
             # network index is modulo num_networks
@@ -180,13 +180,13 @@ function fn_create_security_group {
             --description "S3P Sec group with SSH + ICMP rules" \
             $SEC_GRP_NAME)
         # allow SSH
-        openstack security group rule create --ingress $SEC_GRP_ID --protocol tcp \
-            --dst-port 22:22 --src-ip 0.0.0.0/0
-        openstack security group rule create --egress $SEC_GRP_ID --protocol tcp -\
-            -dst-port 22:22 --src-ip 0.0.0.0/0
+        openstack security group rule create --ingress --protocol tcp \
+            --dst-port 22:22 --src-ip 0.0.0.0/0 $S3P_SEC_GRP_ID
+        openstack security group rule create --egress --protocol tcp \
+            --dst-port 22:22 --src-ip 0.0.0.0/0 $S3P_SEC_GRP_ID
         #allow ping
-        openstack security group rule create --ingress --protocol ICMP $SEC_GRP_ID
-        openstack security group rule create --egress --protocol ICMP $SEC_GRP_ID
+        openstack security group rule create --ingress --protocol icmp $S3P_SEC_GRP_ID
+        openstack security group rule create --egress  --protocol icmp $S3P_SEC_GRP_ID
         openstack security group show $SEC_GRP_NAME
     else
         S3P_SEC_GRP_ID=$SEC_GRP_ID
