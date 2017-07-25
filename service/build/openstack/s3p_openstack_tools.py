@@ -13,12 +13,17 @@ default_image=""
 default_flavor=""
 default_secgrp=""
 
-
 """
 List resources from the Compute service.
-
-For a full guide see TODO(etoews):link to docs on developer.openstack.org
 """
+def debug_print(stringIn=''):
+    """docstring for dbgPrint"""
+    if debug_mode:
+        print(stringIn)
+
+def get_servers(conn):
+    return conn.compute.servers()
+
 def list_servers(conn):
     print("List Servers:")
     for server in conn.compute.servers():
@@ -130,12 +135,10 @@ def create_server(conn, s3p_server_name, s3p_hypervisor, s3p_network):
     global default_image
     global default_flavor
     global default_secgrp
-    print("Image ID for Image {0} = {1}".format(IMAGE_NAME,default_image.id))
-    print("Flavor ID for flavor {0} = {1}".format(FLAVOR_NAME,default_flavor.id))
-    print("Security Group ID for '{0}' = {1}".format(SEC_GRP_NAME, default_secgrp.id))
-
-
-    # keypair = create_keypair(conn)
+    if debug_mode:
+        print("Image ID for Image {0} = {1}".format(IMAGE_NAME,default_image.id))
+        print("Flavor ID for flavor {0} = {1}".format(FLAVOR_NAME,default_flavor.id))
+        print("Security Group ID for '{0}' = {1}".format(SEC_GRP_NAME, default_secgrp.id))
 
     if not(debug_mode):
         compute_host = conn.compute.find_hypervisor(s3p_hypervisor)
@@ -149,8 +152,9 @@ def create_server(conn, s3p_server_name, s3p_hypervisor, s3p_network):
         print("Server IP address={ip}".format(ip=server.addresses))
 
 def get_openstack_connection():
+    service_host_ip = os.getenv('SERVICE_HOST')
     auth_args = {
-        'auth_url': 'http://10.129.18.2:5000/v2.0',
+        'auth_url': 'http://' + service_host_ip + ':5000/v2.0',
         'project_name': 'demo',
         'username': 'admin',
         'password': 'secret',
