@@ -30,6 +30,12 @@ def list_servers(conn):
         print(server)
 
 
+def list_servers_by_name(conn):
+    server_list = []
+    for server in conn.compute.servers():
+        server_list.append(server.name)
+    return server_list
+
 def list_images(conn):
     print("List Images:")
     for image in conn.compute.images():
@@ -52,6 +58,14 @@ def list_hypervisors(conn):
     for hypervisor in conn.compute.hypervisors():
         print(hypervisor)
 
+def list_hypervisors_by_name(conn):
+    """Returns a list of active hypervisors by name"""
+    hypervisor_list=[]
+    for hypervisor in conn.compute.hypervisors():
+        debug_print(hypervisor.name)
+        hypervisor_list.append(hypervisor.name)
+    return hypervisor_list
+
 def list_project_id(conn):
     print("List project id's:")
     for project in conn.identityv2.projects():
@@ -64,6 +78,13 @@ def list_networks(conn):
     print("List Networks:")
     for network in conn.network.networks():
         print(network)
+
+def list_networks_by_name(conn):
+    netlist=[]
+    for network in conn.network.networks():
+        netlist.append(network.name)
+    return netlist
+
 
 def list_subnets(conn):
     print("List Subnets:")
@@ -95,37 +116,48 @@ Create a project network and subnet.
 This network can be used when creating a server and allows the server to
 communicate with others servers on the same project network.
 """
+def create_network_raw(conn, network_name):
+    """creates a network based on a network name - no checking for existing"""
+    new_network = conn.network.create_network(
+        name=network_name)
+    return new_network
+    
+def create_subnet_raw(conn, subnet_name, parent_network_id, subnet_cidr, gateway):
+    """creates a subnet without checking for existing subnets"""
+    new_subnet = conn.network.create_subnet(
+        name=subnet_name,
+        network_id=parent_network_id,
+        ip_version='4',
+        cidr=subnet_cidr,
+        gateway_ip=gateway)
+    return new_subnet
+
 def create_network(conn, network_index):
     basename="s3p-net-"
     network_name=basename+str(network_index)
-    print("Create Network:")
-
-    example_network = conn.network.create_network(
-        name=network_name)
-
-    print(example_network)
-
-    example_subnet = conn.network.create_subnet(
-        name=network_name+'-sub',
-        network_id=example_network.id,
-        ip_version='4',
-        cidr='10.0.'+str(network_index)+'.0/24',
-        gateway_ip='10.0.'+str(network_index)+'.1')
-
-    print(example_subnet)
+    debug_print("Create Network:")
+    example_network = create_network_raw(conn, network_name)
+    debug_print(example_network)
+    subnet_name = network_name+'-sub'
+    network_id = example_network.id
+    cidr = '10.0.'+str(network_index)+'.0/24'
+    gateway_ip = '10.0.'+str(network_index)+'.1'
+    example_subnet = create_subnet_raw(conn, subnet_name, network_id, cidr, gateway_ip)
+    debug_print(example_subnet)
     return example_network
 
 
-def delete_network(conn, network_name):
-    print("Delete Network:")
-
-    example_network = conn.network.find_network(
+def delete_network(conn, network_name, router_name='router1'):
+    debug_print("Delete Network:")
+    os_router = conn.network.find_router(router_name)
+    os_network = conn.network.find_network(
         network_name)
-
-    for example_subnet in example_network.subnet_ids:
-        conn.network.delete_subnet(example_subnet, ignore_missing=False)
-
-    conn.network.delete_network(example_network, ignore_missing=False)
+    # remove subnet interfaces from router and delete subnets
+    for subnet_id in os_network.subnet_ids:
+        # TODO: the following line throws exceptions if the subnet has not been attached to it yet
+        conn.network.router_remove_interface(os_router, subnet_id)
+        conn.network.delete_subnet(subnet_id, ignore_missing=False)
+    conn.network.delete_network(os_network, ignore_missing=False)
 
 """
 Create resources
@@ -150,6 +182,12 @@ def create_server(conn, s3p_server_name, s3p_hypervisor, s3p_network):
             networks=[{"uuid": s3p_network.id}])
         server = conn.compute.wait_for_server(server)
         print("Server IP address={ip}".format(ip=server.addresses))
+
+def delete_server(conn, server_name):
+    """deletes a server from the cluster"""
+    if not(debug_mode):
+        server = conn.compute.find_server(server_name)
+        conn.compute.delete_server(server)
 
 def get_openstack_connection():
     service_host_ip = os.getenv('SERVICE_HOST')
