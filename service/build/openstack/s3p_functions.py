@@ -122,15 +122,24 @@ def cleanup(conn):
     global server_list
     global network_list
     # delete servers
+    # server_list = s3p.list_servers_by_name(conn)
+    # for server_name in server_list:
+    #     delete_instance(conn, server_name)
+    # server_list = []
+    # list comprehension to delete all s3p servers ('tenant-')
+    [ delete_instance(conn, server.id) for server in conn.compute.servers()
+            if s3p_defaults['server_prefix'] in server.name ]
     server_list = s3p.list_servers_by_name(conn)
-    for server_name in server_list:
-        delete_instance(conn, server_name)
-    server_list = []
+
     # delete networks
-    network_list = s3p.list_networks_by_name(conn)
-    for network_name in network_list:
-        delete_network_and_subnet(conn, network_name)
-    network_list = []
+    # network_list = s3p.list_networks_by_name(conn)
+    # for network_name in network_list:
+    #     delete_network_and_subnet(conn, network_name)
+    # network_list = []
+    # use a list comprehension to delete the s3p networks.  It's scary, but works beautifully
+    [ delete_network_and_subnet(conn, network) for network in conn.network.networks() 
+            if s3p_defaults['network_prefix'] in network.name ]
+    network_list  = s3p.list_networks_by_name(conn)
 
 # COMPLETED:
 def unit_tests(conn):
@@ -238,6 +247,7 @@ def main():
     global hypervisor_list
     global server_list
     global debug_mode
+    global s3p_defaults
 
     # parse input args with argparse
     # input args:
@@ -267,7 +277,9 @@ def main():
 
     s3p_defaults = {'secgrp_name': 's3p_secgrp',
             'image_name': 'cirros-0.3.4-x86_64-uec',
-            'flavor_name': 'cirros256'
+            'flavor_name': 'cirros256',
+            'network_prefix': 's3p-net-',
+            'server_prefix': 'tenant-'
             }
 
     s3p_resource_ids = get_resource_ids(conn, s3p_defaults)

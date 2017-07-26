@@ -31,9 +31,10 @@ def list_servers(conn):
 
 
 def list_servers_by_name(conn):
-    server_list = []
-    for server in conn.compute.servers():
-        server_list.append(server.name)
+    # server_list = []
+    # for server in conn.compute.servers():
+    #     server_list.append(server.name)
+    server_list = [server.name for server in conn.compute.servers() if True]
     return server_list
 
 def list_images(conn):
@@ -118,19 +119,19 @@ communicate with others servers on the same project network.
 """
 def create_network_raw(conn, network_name):
     """creates a network based on a network name - no checking for existing"""
-    new_network = conn.network.create_network(
+    os_network = conn.network.create_network(
         name=network_name)
-    return new_network
-    
+    return os_network
+
 def create_subnet_raw(conn, subnet_name, parent_network_id, subnet_cidr, gateway):
     """creates a subnet without checking for existing subnets"""
-    new_subnet = conn.network.create_subnet(
+    os_subnet = conn.network.create_subnet(
         name=subnet_name,
         network_id=parent_network_id,
         ip_version='4',
         cidr=subnet_cidr,
         gateway_ip=gateway)
-    return new_subnet
+    return os_subnet
 
 def create_network(conn, network_index):
     basename="s3p-net-"
@@ -182,6 +183,12 @@ def create_server(conn, s3p_server_name, s3p_hypervisor, s3p_network):
             networks=[{"uuid": s3p_network.id}])
         server = conn.compute.wait_for_server(server)
         print("Server IP address={ip}".format(ip=server.addresses))
+
+def delete_server_id(conn, server_id):
+    """  deletes a server based on its ID """
+    if not(debug_mode):
+        server = conn.compute.find_server(server_id)
+        conn.compute.delete_server(server)
 
 def delete_server(conn, server_name):
     """deletes a server from the cluster"""
