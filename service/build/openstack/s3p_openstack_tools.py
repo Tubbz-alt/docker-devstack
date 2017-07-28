@@ -22,6 +22,7 @@ def debug_print(stringIn=''):
         print(stringIn)
 
 def get_servers(conn):
+    # returns a generator of the servers in this cloud
     return conn.compute.servers()
 
 def list_servers(conn):
@@ -30,7 +31,7 @@ def list_servers(conn):
         print(server)
 
 
-def list_servers_by_name(conn):
+def list_servers_by_name(conn, filter=''):
     # server_list = []
     # for server in conn.compute.servers():
     #     server_list.append(server.name)
@@ -148,21 +149,36 @@ def create_network(conn, network_index):
     return example_network
 
 
-def delete_network(conn, network_name, router_name='router1'):
+def delete_network(conn, os_network, router_name='router1'):
     debug_print("Delete Network:")
     os_router = conn.network.find_router(router_name)
-    os_network = conn.network.find_network(
-        network_name)
-    # remove subnet interfaces from router and delete subnets
-    for subnet_id in os_network.subnet_ids:
-        # TODO: the following line throws exceptions if the subnet has not been attached to it yet
-        conn.network.router_remove_interface(os_router, subnet_id)
-        conn.network.delete_subnet(subnet_id, ignore_missing=False)
-    conn.network.delete_network(os_network, ignore_missing=False)
+    #os_network = conn.network.find_network(network_name)
+    # print("net name: {0}".format(os_network.name))
+    if os_network != None:
+        # remove subnet interfaces from router and delete subnets
+        for subnet_id in os_network.subnet_ids:
+            # TODO: the following line throws exceptions if the subnet has not been attached to it yet
+            # conn.network.router_remove_interface(os_router, subnet_id)
+            conn.network.delete_subnet(subnet_id, ignore_missing=False)
+        conn.network.delete_network(os_network, ignore_missing=False)
 
 """
 Create resources
 """
+
+def create_server_raw(conn, server_name, hypervisor_name, network_name,
+        image_id_in, flavor_id_in, secgrp_name):
+    os_hypervisor = conn.compute.find_hypervisor(hypervisor_name)
+    os_network = conn.network.find_network(network_name)
+    server = conn.compute.create_server(
+        name = server_name,
+        image_id = image_id_in,
+        flavor_id = flavor_id_in,
+        hypervisor = os_hypervisor,
+        security_groups = [{"name":secgrp_name}],
+        networks = [{"uuid": os_network.id}])
+    server = conn.compute.wait_for_server(server)
+    print("Server IP address={ip}".format(ip=server.addresses))
 
 def create_server(conn, s3p_server_name, s3p_hypervisor, s3p_network):
     global default_image
@@ -196,6 +212,12 @@ def delete_server(conn, server_name):
         server = conn.compute.find_server(server_name)
         conn.compute.delete_server(server)
 
+def get_openstack_connection_raw(auth_args):
+    """obtains an OpenStack connection from a supplied dictionary of auth args"""
+    print("Connecting to Openstack at {0}".format(auth_args['auth_url']))
+    conn = connection.Connection(**auth_args)
+    return conn
+    
 def get_openstack_connection():
     service_host_ip = os.getenv('SERVICE_HOST')
     auth_args = {
@@ -204,9 +226,50 @@ def get_openstack_connection():
         'username': 'admin',
         'password': 'secret',
     }
-    print("Connecting to Openstack at {0}".format(auth_args['auth_url']))
-    conn = connection.Connection(**auth_args)
-    return conn
+    return get_openstack_connection_raw(auth_args)
+
+def create_security_group(conn, secgrp_name, project_id_in):
+    """ create a security group from a name """
+    os_security_group = conn.network.create_security_group(
+            name = secgrp_name,
+            description = "S3P secgrp: Allow ICMP + SSH",
+            project_id = project_id_in
+            )
+    return os_security_group
+
+
+def add_security_group_rules_ssh(conn, sec_grp_id):
+    ssh_ingress = conn.network.create_security_group_rule(
+            security_group_id = sec_grp_id,
+            protocol = 'tcp',
+            direction = 'ingress',
+            port_range_min = 22, port_range_max = 22,
+            description = "Allow SSH ingress on port 22"
+            )
+    ssh_egress = conn.network.create_security_group_rule(
+            security_group_id = sec_grp_id,
+            protocol = 'tcp',
+            direction = 'egress',
+            port_range_min = 22, port_range_max = 22,
+            description = "Allow SSH egress on port 22"
+            )
+    return ssh_ingress, ssh_egress
+
+def add_security_group_rules_icmp(conn, sec_grp_id):
+    icmp_ingress = conn.network.create_security_group_rule(
+            security_group_id = sec_grp_id,
+            protocol = 'icmp',
+            direction = 'ingress',
+            description = "Allow ICMP ingress"
+            )
+    icmp_egress = conn.network.create_security_group_rule(
+            security_group_id = sec_grp_id,
+            protocol = 'icmp',
+            direction = 'egress',
+            description = "Allow ICMP egress"
+            )
+    return icmp_ingress, icmp_egress
+
 
 def main():
     global default_image

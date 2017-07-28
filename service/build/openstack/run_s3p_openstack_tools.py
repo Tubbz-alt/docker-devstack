@@ -7,7 +7,7 @@ def main():
     conn = s3p.get_openstack_connection()    	
     network_name="super-cool-net"
 
-    if (debug_mode):
+    if not(debug_mode):
         """
         The following functions are working:
         """
