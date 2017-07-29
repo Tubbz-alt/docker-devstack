@@ -170,6 +170,7 @@ def create_server_raw(conn, server_name, hypervisor_name, network_name,
         image_id_in, flavor_id_in, secgrp_name):
     os_hypervisor = conn.compute.find_hypervisor(hypervisor_name)
     os_network = conn.network.find_network(network_name)
+    # print("server_name: {0}; hypervisor_name: {1}; network_name: {2}".format(server_name, hypervisor_name, network_name))
     server = conn.compute.create_server(
         name = server_name,
         image_id = image_id_in,
@@ -179,6 +180,7 @@ def create_server_raw(conn, server_name, hypervisor_name, network_name,
         networks = [{"uuid": os_network.id}])
     server = conn.compute.wait_for_server(server)
     print("Server IP address={ip}".format(ip=server.addresses))
+    return server
 
 def create_server(conn, s3p_server_name, s3p_hypervisor, s3p_network):
     global default_image

@@ -2,6 +2,8 @@
 import s3p_openstack_tools as s3p
 from datetime import datetime
 import argparse
+import sys
+import os
 from time import sleep
 
 debug_mode=True
@@ -10,7 +12,7 @@ network_list=[]
 subnet_list=[]
 hypervisor_list=[]
 server_list=[]
-validate_existing = False
+validate_existing = True
 
 def isodate():
     """prints the date in a pseudo-ISO format (Y-M-D H:M:S)"""
@@ -60,11 +62,14 @@ def create_instance(conn, instance_name, hypervisor_name, network_name,
                 resource_ids['flavor_id'], s3p_defaults['secgrp_name']
                 )
         t2=datetime.now()
-        if os_instance == None:
+        type(os_instance)
+        print os_instance
+
+        if False:   #os_instance == None:
             logprint("ERROR: Server creation failed for:\nserver name: {0}".format(
                 instance_name))
             sys.exit(1)
-        else
+        else:
             logprint("Server Creation took {1} seconds".format(isodate(),
                 (t2-t1).total_seconds()))
     else:
@@ -89,10 +94,10 @@ def smoke_test_server(conn, os_instance, os_network):
     t1 =datetime.now()
     """ timing: get instance IP address and network_id """
     NETNS = 'qdhcp-' + os_network.id
-    ip_addr = os_server.addresses[os_network.name][0]['addr']
-    logprint("Server '{0}' obtained IPV4 address: {1}".format(os_server.name, ip_addr))
+    ip_addr = os_instance.addresses[os_network.name][0]['addr']
+    logprint("Server '{0}' obtained IPV4 address: {1}".format(os_instance.name, ip_addr))
     """ enter netns and ping instance IP """
-    command  = "ip netns exec qdhcp-" + os_network.id + " ping -c 1 " + os_server.addresses[os_network.name][0]['addr']
+    command  = "ip netns exec qdhcp-" + os_network.id + " ping -c 1 " + os_instance.addresses[os_network.name][0]['addr']
     print("Smoke test: {0}".format(command))
     """ TODO: This smoke test is very coarse - could be much better"""
     response = os.system(command)
@@ -156,6 +161,7 @@ def create_network_and_subnet(conn, network_name, network_ix):
         else:
             logprint("ERROR: Failed to create openstack network '{0}'".format(
                 network_name))
+            sys.exit(1)
     else:
         logprint("WARNING: an OpenStack network named '{0}' already exists - skipping creation.".format(
             network_name))
