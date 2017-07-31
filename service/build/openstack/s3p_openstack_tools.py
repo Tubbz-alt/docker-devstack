@@ -60,6 +60,12 @@ def list_hypervisors(conn):
     for hypervisor in conn.compute.hypervisors():
         print(hypervisor)
 
+def get_hypervisor_set(conn, prefix=''):
+    """ Returns the set of hypervisors matching a name prefix """
+    hypervisor_set = { hypervisor.name for hypervisor in conn.compute.hypervisors()
+        if prefix in hypervisor.name }
+    return hypervisor_set
+
 def list_hypervisors_by_name(conn):
     """Returns a list of active hypervisors by name"""
     hypervisor_list=[]
@@ -76,10 +82,36 @@ def list_project_id(conn):
 """
 List resources from the network service.
 """
+def get_server_detail(conn, server_name):
+    """ Returs an os_ServerDetail if name matches"""
+    server_list=[ server for server in  conn.compute.servers(details=True, name=server_name) ]
+    if len(server_list) == 1:
+        server = server_list[0]
+    else:
+        logprint("ERROR: server named '{0}' not found".format(server_name))
+        server = None
+    return server
+
 def list_networks(conn):
     print("List Networks:")
     for network in conn.network.networks():
         print(network)
+
+def get_network_set(conn, prefix=''):
+    """ Returns a set of the networks in the cloud with name prefix matching """
+    net_set = { net.name for net in conn.network.networks() if prefix in net.name }
+    return net_set
+
+def get_subnet_set(conn, name=''):
+    """ Returns a set of the subnets in the cloud with name matching """
+    subnet_set = { subnet.name for subnet in conn.network.subnets() if name in subnet.name }
+    return subnet_set
+
+def get_servers_set(conn, name=''):
+    """ Returns a set of the servers in the cloud with name matching """
+    server_set = { server.name for subnet in conn.compute.servers if name in server.name }
+    return server_set
+
 
 def list_networks_by_name(conn):
     netlist=[]
@@ -148,6 +180,54 @@ def create_network(conn, network_index):
     debug_print(example_subnet)
     return example_network
 
+def get_os_router(conn, router_name):
+    """ function wraps conn.network.find_router() """
+    return conn.network.find_router(router_name)
+
+def router_add_subnet(conn, os_router, subnet_id):
+    """ function wraps conn.network.router_add_interface()
+
+    router_add_interface(router, subnet_id=None, port_id=None)
+    Add Interface to a router
+    Parameters:
+        router: Either the router ID or an instance of Router
+        subnet_id: id of the subnet
+        port_id: id of the port
+    Returns: Router with updated interface
+    Return type: class: openstack.network.v2.router.Router
+    """
+    conn.network.router_add_interface( os_router, subnet_id )
+
+def router_remove_subnet(conn, os_router, subnet_id):
+    """ function wraps conn.network.router_remove_interface()
+
+    router_remove_interface(router, subnet_id=None, port_id=None)
+    Remove Interface from a router
+    Parameters:
+        router: Either the router ID or an instance of Router
+        subnet_id: id of the subnet
+        port_id: id of the port
+    Returns: Router with updated interface
+    Return type: class: openstack.network.v2.router.Router
+    """
+    print("Removing subnet id {0} from router '{1}'".format(
+        subnet_id, os_router.name))
+    try:
+        conn.network.router_remove_interface(os_router, subnet_id)
+    except :
+        print("WARNING: Subnet id {0} has no interface on {1}".format(subnet_id, os_router.name))
+
+def remove_subnet_ports_from_router(conn, os_router, subnet_id):
+    # # remove network ports (subnet interfaces) from router
+    #   for port_id in os_network.ports():
+    #       router_remove_subnet(conn, os_router, port_id)
+    ports_to_remove = [ port for port in conn.network.ports()
+        if ((port.device_owner == 'network:router_interface') &
+            (port['fixed_ips'][0]['subnet_id'] == subnet_id)) ]
+
+    if len(ports_to_remove) > 0:
+        print("Removing router port {1} from router {0}".format(os_router.name, port.id))
+        router_remove_subnet( conn, os_router, subnet_id )
 
 def delete_network(conn, os_network, router_name='router1'):
     debug_print("Delete Network:")
@@ -157,9 +237,8 @@ def delete_network(conn, os_network, router_name='router1'):
     if os_network != None:
         # remove subnet interfaces from router and delete subnets
         for subnet_id in os_network.subnet_ids:
-            # TODO: the following line throws exceptions if the subnet has not been attached to it yet
-            # conn.network.router_remove_interface(os_router, subnet_id)
-            conn.network.delete_subnet(subnet_id, ignore_missing=False)
+            router_remove_subnet(conn, os_router, subnet_id)
+        conn.network.delete_subnet(subnet_id, ignore_missing=False)
         conn.network.delete_network(os_network, ignore_missing=False)
 
 """
@@ -219,7 +298,7 @@ def get_openstack_connection_raw(auth_args):
     print("Connecting to Openstack at {0}".format(auth_args['auth_url']))
     conn = connection.Connection(**auth_args)
     return conn
-    
+
 def get_openstack_connection():
     service_host_ip = os.getenv('SERVICE_HOST')
     auth_args = {
