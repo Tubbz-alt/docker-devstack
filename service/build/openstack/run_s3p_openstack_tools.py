@@ -12,13 +12,13 @@ def main():
         The following functions are working:
         """
         # List compute resources
-        # s3p.list_servers(conn)
-        # list_servers(conn)
-        # list_images(conn)
-        # s3p.list_flavors(conn)
-        # list_keypairs(conn)
-        s3p.list_images(conn)
-        s3p.list_servers(conn)
+        # s3p.print_server_list(conn)
+        # print_server_list(conn)
+        # print_images_list(conn)
+        # s3p.print_flavor_list(conn)
+        # print_keypair_list(conn)
+        s3p.print_images_list(conn)
+        s3p.print_server_list(conn)
         node_id="21-11"
         compute_host="compute-"+node_id
         server_name="tenant-"+node_id+"-1"
@@ -30,13 +30,11 @@ def main():
         print("")
         s3p.list_subnets(conn)
         print("")
-        s3p.list_security_groups(conn)
+        s3p.print_security_group_list(conn)
         print("")
         s3p.list_network_agents(conn)
         print("")
-        s3p.list_net_availability_zones(conn)
-        print("")
-        s3p.list_comp_availability_zones(conn)
+        s3p.print_net_availability_zones_list(conn)
         print("")
 
         # create a network:

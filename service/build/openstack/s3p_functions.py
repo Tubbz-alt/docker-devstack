@@ -8,13 +8,14 @@ from time import sleep
 
 debug_mode=False
 verbosity_level=0
-validate_existing = True
+validate_existing = False
 attach_to_router=True
 network_list=[]
 subnet_list=[]
 hypervisor_list=[]
 hypervisor_set=set()
 server_list=[]
+server_set = set()
 
 def isodate():
     """prints the date in a pseudo-ISO format (Y-M-D H:M:S)"""
@@ -52,21 +53,37 @@ def create_instance(conn, instance_name, hypervisor_name, network_name,
     hypervisor, attached to a specific network
     """
     global validate_existing
-    debug_print("validate_existing = {0}".format(validate_existing), 1)
+    debug_print("validate_existing = {0}".format(validate_existing), 2)
     global server_list
+    global server_set
     """ check if instance is already created """
+    if not(instance_name in server_set):
+        # create instance
+        pass
+    else:
+        # instance exists, get details
+        pass
+
     if not(instance_name in server_list):
         # create instance
         logprint("Creating server {0} on host {1}, network {2}".format(
             instance_name, hypervisor_name, network_name))
         t1=datetime.now()
+        attrs = {
+                'name': server_name,
+                'image_id': image_id,
+                'flavor_id': flavor_id,
+                'security_groups':[{"name":secgrp_name}],
+                'networks':[{"uuid":network.id}],
+                'host_id':'293160ef6974833cdedf022f11b3dbf5d259455f3219f9f28dd5ec52'
+                }
         os_instance = s3p.create_server_raw(conn, instance_name, hypervisor_name,
                 network_name, resource_ids['image_id'],
                 resource_ids['flavor_id'], s3p_defaults['secgrp_name']
                 )
         t2=datetime.now()
         debug_print( "os_instance = {0}".format(os_instance) , 3)
-        debug_print( "type(os_instance) = {0}".format(type(os_instance)) , 4)
+        debug_print( "type(os_instance) = {0}".format(type(os_instance)) , 3)
 
         if False:   #os_instance == None:
             logprint("ERROR: Server creation failed for:\nserver name: {0}".format(
@@ -74,9 +91,11 @@ def create_instance(conn, instance_name, hypervisor_name, network_name,
             sys.exit(1)
         else:
             logprint("Server Creation took {0} seconds".format((t2-t1).total_seconds()))
+            server_list.append(os_instance.name)
+            server_set.add(os_instance.name)
     else:
         os_instance = s3p.get_server_detail(conn, instance_name)
-        debug_print("Type of os_instance = {0}".format(type(os_instance)), 4)
+        debug_print("Type of os_instance = {0}".format(type(os_instance)), 3)
         debug_print("os_instance = {0}".format(os_instance), 3)
         debug_print("WARNING: an OpenStack instance with name '{0}' ({1})".format(os_instance.name, instance_name) +
             "already exists, skipping creation", 1)
@@ -124,9 +143,20 @@ def delete_instance(conn, instance_name):
 
 """  network management functions """
 def determine_net_index(comp_id, num_networks, host_id, numberingType='one_net'):
-    """Function determines which network will be used"""
+    """Function determines which network will be used
+        modulo_num_networks == modulous of number of networks (evenly distributed)
+        one_per_physhost == one network per physical host,
+                            all instances on that host are only on that network
+                            i.e. comp-11-13 and comp-11-12 share a network
+                            a.k.a. "Vertical networks"
+        one_per_wave == one network common to each "wave" of compute hosts
+                        i.e. comp-11-13 & comp-39-13 share a network
+                        a.k.a. "Horizontal networks"
+        """
     if numberingType == 'modulo_num_networks':
         networkIdx = comp_id % num_networks
+    elif numberingType == 'one_per_wave':
+        networkIdx = comp_id
     elif numberingType == 'one_per_physhost':
         networkIdx = host_id
     else:
@@ -174,7 +204,7 @@ def create_network_and_subnet(conn, network_name, network_ix):
                     cidr,
                     gateway_ip)
             if attach_to_router:
-                os_router = s3p.get_os_router(router_name)
+                os_router = s3p.get_os_router(conn, router_name)
                 s3p.router_add_subnet(conn, os_router, os_subnet.id)
         else:
             logprint("ERROR: Failed to create openstack network '{0}'".format(
@@ -190,18 +220,14 @@ def delete_network_and_subnet(conn, os_network):
     """
     name = os_network.name
     logprint("Deleting network \"{0}\"".format(name))
-    # TODO: remove router interface to network
     s3p.delete_network(conn, os_network)
     logprint("Network \"{0}\" Successfully deleted".format(name))
-
-def set_quotas(conn):
-    """sets OpenStack quotas for scale testing"""
-    logprint("Setting quotas for OpenStack")
 
 # cleanup
 def cleanup(conn):
     """removes all allocated OpenStack resources incl. servers, networks, subnets"""
     global server_list
+    global server_set
     global network_list
     global network_set
     # delete servers
@@ -210,9 +236,11 @@ def cleanup(conn):
     #     delete_instance(conn, server_name)
     # server_list = []
     # list comprehension to delete all s3p servers ('tenant-')
+    server_prefix = s3p_defaults['server_prefix']
     [ delete_instance(conn, server.id) for server in conn.compute.servers()
-            if s3p_defaults['server_prefix'] in server.name ]
+            if server_prefix in server.name ]
     server_list = s3p.list_servers_by_name(conn)
+    server_set = s3p.get_server_set(conn)
 
     # delete networks
     # network_list = s3p.list_networks_by_name(conn)
@@ -237,14 +265,8 @@ def unit_tests(conn):
     """
     The following functions are working:
     """
-    # List compute resources
-    # s3p.list_servers(conn)
-    # list_servers(conn)
-    # list_images(conn)
-    # s3p.list_flavors(conn)
-    # list_keypairs(conn)
-    s3p.list_images(conn)
-    s3p.list_servers(conn)
+    s3p.print_images_list(conn)
+    s3p.print_server_list(conn)
     node_id="21-11"
     compute_host="compute-"+node_id
     server_name="tenant-"+node_id+"-1"
@@ -254,11 +276,11 @@ def unit_tests(conn):
     # List network resources
     s3p.list_networks(conn)
     print("")
-    s3p.list_subnets(conn)
+    s3p.print_subnet_list(conn)
     print("")
-    s3p.list_security_groups(conn)
+    s3p.print_security_group_list(conn)
     print("")
-    s3p.list_network_agents(conn)
+    s3p.print_network_agent_list(conn)
     print("")
     s3p.list_net_availability_zones(conn)
     print("")
@@ -284,10 +306,10 @@ def get_resource_ids(conn, names):
     os_flavor = conn.compute.find_flavor(names['flavor_name'])
     defaults['flavor_id'] = os_flavor.id
 
-    debug_print("S3P Resource IDs:", 1)
-    debug_print("{0}: {1}".format(names['secgrp_name'], defaults['secgrp_id']), 1)
-    debug_print("{0}: {1}".format(names['image_name'], defaults['image_id']), 1)
-    debug_print("{0}: {1}".format(names['flavor_name'], defaults['flavor_id']), 1)
+    debug_print("S3P Resource IDs:", 2)
+    debug_print("{0}: {1}".format(names['secgrp_name'], defaults['secgrp_id']), 2)
+    debug_print("{0}: {1}".format(names['image_name'], defaults['image_id']), 2)
+    debug_print("{0}: {1}".format(names['flavor_name'], defaults['flavor_id']), 2)
     return defaults
 
 def parse_ids_from_hypervisor_name(hypervisor_name):
@@ -309,7 +331,7 @@ def one_shot_create(conn):
 
     num_networks = 1
     servers_per_host = 1
-    net_numbering_type = 'one_per_physhost'
+    net_numbering_type = 'one_per_wave'
     # only create one tenant per host for now
     instance_name = 'tenant-' + hypervisor_ID + '-1'
     network_ix = determine_net_index(
@@ -342,6 +364,7 @@ def main():
     global hypervisor_list
     global hypervisor_set
     global server_list
+    global server_set
     global debug_mode
     global s3p_defaults
     global verbosity_level
@@ -353,11 +376,17 @@ def main():
     input args:
     --cleanup - deletes all s3p-created instances and networks
     --debug - enables debug_mode
+    NOTE on verbosity level:
+        0: prints only stats messages
+        1: prints WARNING: messages
+        2: prints control messages
+        3: prints details of resource creation
+        4: prints ???
+    TODO:
     operation - arguments to describe how many networks, servers, etc are created
       operation['num_networks']
       operation['num_servers']
       operation['servers_per_host']
-      ...
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--cleanup",
@@ -368,13 +397,6 @@ def main():
         action="store_true")
     parser.add_argument("-v", "--verbosity", type=int, choices=[0,1,2,3,4],
         help="verbosity level for prints in debug mode (must enable debug mode)")
-    """ NOTE on verbosity level:
-        0: prints only stats messages
-        1: prints WARNING: messages
-        2: prints details of creations
-        3: prints ???
-        4: prints ???
-    """
 
     args = parser.parse_args()
 
@@ -409,48 +431,33 @@ def main():
     else:
         """ Assumptions:
             quotas and s3p_secgrp are alreay created
-        set_quotas(conn)
         create_security_group(conn, s3p_defaults.secgrp_name)
         """
         # get list of networks by name
         network_list = s3p.list_networks_by_name(conn)
-        debug_print("Network list: {0}".format(network_list), 1)
+        debug_print("Network list: {0}".format(network_list), 2)
         network_set = s3p.get_network_set(conn, s3p_defaults['network_prefix'])
-        debug_print("Network set: {0}".format(network_set), 1)
+        debug_print("Network set: {0}".format(network_set), 2)
 
         # get list of hypervisors by name
         hypervisor_list = s3p.list_hypervisors_by_name(conn)
         hypervisor_set = s3p.get_hypervisor_set(conn, prefix='compute-')
-        debug_print("Hypervisor List: {0}".format(hypervisor_list), 1)
-        debug_print("Hypervisor Set:  {0}".format(hypervisor_set ), 1)
+        debug_print("Hypervisor List: {0}".format(hypervisor_list), 2)
+        debug_print("Hypervisor Set:  {0}".format(hypervisor_set ), 2)
 
         # get list of servers by name
         server_list = s3p.list_servers_by_name(conn)
-        debug_print("Server List: {0}".format(server_list), 1)
+        server_set = s3p.get_server_set(conn)
+
+        debug_print("Server List: {0}".format(server_list), 2)
+        debug_print("Server Set: {0}".format(server_set), 2)
 
         servers_per_host = 1
-        max_networks = len(hypervisor_list)
+        max_networks = 25
+        #len(hypervisor_list)
 
-        net_numbering_type = 'one_per_physhost'
 
-        # instance_name = 'tenant-' + hypervisor_ID + '-1'
-        # network_ix = determine_net_index(
-        #     comp_id,
-        #     max_networks,
-        #     phys_host_id,
-        #     net_numbering_type)
-        # network_name = 's3p-net-' + str(network_ix)
-
-        # network_id = create_network_and_subnet(conn,
-        #     network_name,
-        #     network_ix)
-
-        # create_instance(conn,
-        #     instance_name,
-        #     hypervisor_name,
-        #     network_id)
-
-        # delete_instance(conn, instance_name)
+        net_numbering_type = 'one_per_wave'
 
         # loop through hypervisors, creating tenants on each
         for hypervisor_name in hypervisor_list:
@@ -471,16 +478,19 @@ def main():
             hypervisor_ID = phys_host_id + "-" + comp_id
             # only create one tenant per host for now
             instance_name = 'tenant-' + hypervisor_ID + "-1"
+            t1 = datetime.now()
             create_instance(conn,
                 instance_name,
                 hypervisor_name,
                 network_name,
                 s3p_resource_ids)
 
+            t2 = datetime.now()
+            debug_print("Server and network creation took {0} s".format((t2-t1).total_seconds()), 1)
 
-        # subnet_list = s3p.list_subnets(conn)
-        # hypervisor_list = s3p.list_hypervisors(conn)
-        # server_list = s3p.list_servers(conn)
+        # subnet_list = s3p.print_subnet_list(conn)
+        # hypervisor_list = s3p.print_hypervisor_list(conn)
+        # server_list = s3p.print_server_list(conn)
 
     logprint("Done")
 

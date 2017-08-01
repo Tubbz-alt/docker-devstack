@@ -4,6 +4,7 @@
 from openstack import connection
 import errno
 import os
+import hashlib
 
 FLAVOR_NAME='cirros256'
 SEC_GRP_NAME='s3p_secgrp'
@@ -17,19 +18,15 @@ default_secgrp=""
 List resources from the Compute service.
 """
 def debug_print(stringIn=''):
-    """docstring for dbgPrint"""
+    """ prints only when global debug_mode is set to True"""
+    global debug_mode
     if debug_mode:
         print(stringIn)
 
-def get_servers(conn):
-    # returns a generator of the servers in this cloud
-    return conn.compute.servers()
-
-def list_servers(conn):
+def print_server_list(conn):
     print("List Servers:")
     for server in conn.compute.servers():
         print(server)
-
 
 def list_servers_by_name(conn, filter=''):
     # server_list = []
@@ -38,24 +35,28 @@ def list_servers_by_name(conn, filter=''):
     server_list = [server.name for server in conn.compute.servers() if True]
     return server_list
 
-def list_images(conn):
+def get_server_set(conn, prefix=''):
+    """ returns a set of servers in the cloud (assumes no duplicate names) """
+    server_set = { server.name for server in conn.compute.servers() 
+            if prefix in server.name }
+    return server_set
+
+def print_images_list(conn):
     print("List Images:")
     for image in conn.compute.images():
         print(image)
 
-
-def list_flavors(conn):
+def print_flavor_list(conn):
     print("List Flavors:")
     for flavor in conn.compute.flavors():
         print(flavor)
 
-
-def list_keypairs(conn):
+def print_keypair_list(conn):
     print("List Keypairs:")
     for keypair in conn.compute.keypairs():
         print(keypair)
 
-def list_hypervisors(conn):
+def print_hypervisor_list(conn):
     print("List hypervisor:")
     for hypervisor in conn.compute.hypervisors():
         print(hypervisor)
@@ -74,7 +75,7 @@ def list_hypervisors_by_name(conn):
         hypervisor_list.append(hypervisor.name)
     return hypervisor_list
 
-def list_project_id(conn):
+def print_project_id_list(conn):
     print("List project id's:")
     for project in conn.identityv2.projects():
         print(project)
@@ -112,35 +113,33 @@ def get_servers_set(conn, name=''):
     server_set = { server.name for subnet in conn.compute.servers if name in server.name }
     return server_set
 
-
 def list_networks_by_name(conn):
     netlist=[]
     for network in conn.network.networks():
         netlist.append(network.name)
     return netlist
 
-
-def list_subnets(conn):
+def print_subnet_list(conn):
     print("List Subnets:")
     for subnet in conn.network.subnets():
         print(subnet)
 
-def list_ports(conn):
+def print_port_list(conn):
     print("List Ports:")
     for port in conn.network.ports():
         print(port)
 
-def list_security_groups(conn):
+def print_security_group_list(conn):
     print("List Security Groups:")
     for port in conn.network.security_groups():
         print(port)
 
-def list_network_agents(conn):
+def print_network_agent_list(conn):
     print("List Network Agents:")
     for agent in conn.network.agents():
         print(agent)
 
-def list_net_availability_zones(conn):
+def print_net_availability_zones_list(conn):
     print("List availability zones:")
     for zone in conn.network.availability_zones():
         print(zone)
@@ -185,31 +184,11 @@ def get_os_router(conn, router_name):
     return conn.network.find_router(router_name)
 
 def router_add_subnet(conn, os_router, subnet_id):
-    """ function wraps conn.network.router_add_interface()
-
-    router_add_interface(router, subnet_id=None, port_id=None)
-    Add Interface to a router
-    Parameters:
-        router: Either the router ID or an instance of Router
-        subnet_id: id of the subnet
-        port_id: id of the port
-    Returns: Router with updated interface
-    Return type: class: openstack.network.v2.router.Router
-    """
+    """ function wraps conn.network.router_add_interface() """
     conn.network.router_add_interface( os_router, subnet_id )
 
 def router_remove_subnet(conn, os_router, subnet_id):
-    """ function wraps conn.network.router_remove_interface()
-
-    router_remove_interface(router, subnet_id=None, port_id=None)
-    Remove Interface from a router
-    Parameters:
-        router: Either the router ID or an instance of Router
-        subnet_id: id of the subnet
-        port_id: id of the port
-    Returns: Router with updated interface
-    Return type: class: openstack.network.v2.router.Router
-    """
+    """ function wraps conn.network.router_remove_interface() """
     print("Removing subnet id {0} from router '{1}'".format(
         subnet_id, os_router.name))
     try:
@@ -238,27 +217,49 @@ def delete_network(conn, os_network, router_name='router1'):
         # remove subnet interfaces from router and delete subnets
         for subnet_id in os_network.subnet_ids:
             router_remove_subnet(conn, os_router, subnet_id)
-        conn.network.delete_subnet(subnet_id, ignore_missing=False)
+            conn.network.delete_subnet(subnet_id, ignore_missing=False)
         conn.network.delete_network(os_network, ignore_missing=False)
 
 """
 Create resources
 """
 
+def get_hypervisor_hostId(conn, project_id, hypervisor_hostname):
+    """ determines the hostID for server creation
+        An undocumented "feature" of the SDK is that specifying a server's
+        target host cannot be done with 'hypervisor_hostname=hypervisor_hostname'
+        or by specifying the availability zone as in the CLI, the server's
+        intended destination may be specified as a hostId which is a hash
+        of the project ID and the hypervisor hostname
+        https://ask.openstack.org/en/question/6477/what-is-the-hostid-parameter-in-server-details/
+    """
+    sha_hash = hashlib.sha224(project_id + hypervisor_hostname)  
+    return sha_hash.hexdigest()
+
 def create_server_raw(conn, server_name, hypervisor_name, network_name,
-        image_id_in, flavor_id_in, secgrp_name):
+        image_id_in, flavor_id_in, secgrp_name, project_id):
     os_hypervisor = conn.compute.find_hypervisor(hypervisor_name)
+    host_ID = get_hypervisor_hostId(conn, project_id, hypervisor_name)
+    print(host_ID)
+    print(os_hypervisor.id)
+
+    if not(os_hypervisor.name == hypervisor_name):
+        print("ERROR: found wrong hypervisor:")
+        print("hypervisor_name = {0}".format(hypervisor_name))
+        print("hypervisor found: {0}".format(os_hypervisor.name))
+        print("hypervisor detail: {0}".format(os_hypervisor))
     os_network = conn.network.find_network(network_name)
-    # print("server_name: {0}; hypervisor_name: {1}; network_name: {2}".format(server_name, hypervisor_name, network_name))
+    print("server_name: {0}\nhypervisor_name: {1}\nnetwork_name: {2}".format(server_name, hypervisor_name, network_name))
     server = conn.compute.create_server(
         name = server_name,
         image_id = image_id_in,
         flavor_id = flavor_id_in,
-        hypervisor = os_hypervisor,
+        host_id = host_ID,
         security_groups = [{"name":secgrp_name}],
         networks = [{"uuid": os_network.id}])
     server = conn.compute.wait_for_server(server)
-    print("Server IP address={ip}".format(ip=server.addresses))
+    print("Server '{0}' created on {1}".format(server.name, server.availability_zone))
+    # print("Server IP address={ip}".format(ip=server.addresses))
     return server
 
 def create_server(conn, s3p_server_name, s3p_hypervisor, s3p_network):
@@ -279,7 +280,7 @@ def create_server(conn, s3p_server_name, s3p_hypervisor, s3p_network):
             security_groups=[{"name":default_secgrp.name}],
             networks=[{"uuid": s3p_network.id}])
         server = conn.compute.wait_for_server(server)
-        print("Server IP address={ip}".format(ip=server.addresses))
+        # print("Server IP address={ip}".format(ip=server.addresses))
 
 def delete_server_id(conn, server_id):
     """  deletes a server based on its ID """
@@ -318,7 +319,6 @@ def create_security_group(conn, secgrp_name, project_id_in):
             )
     return os_security_group
 
-
 def add_security_group_rules_ssh(conn, sec_grp_id):
     ssh_ingress = conn.network.create_security_group_rule(
             security_group_id = sec_grp_id,
@@ -351,7 +351,6 @@ def add_security_group_rules_icmp(conn, sec_grp_id):
             )
     return icmp_ingress, icmp_egress
 
-
 def main():
     global default_image
     global default_flavor
@@ -369,25 +368,13 @@ def main():
     default_secgrp = conn.network.find_security_group(SEC_GRP_NAME)
     print("Security Group ID for '{0}' = {1}".format(SEC_GRP_NAME, default_secgrp.id))
 
-    # create networks
-    print("creating network")
-    for ix in range(1,7):
-        network=create_network(conn,ix)
-        hypervisor="compute-8-"+str(ix+10)
-        server_name="s3p-"+hypervisor+"-1"
-        print("Creating server {0}".format(server_name))
-        create_server(conn, server_name, hypervisor, network )
-        print("Listing servers")
-        list_servers(conn)
-    # list_servers(conn)
-    # list_images(conn)
-    # list_flavors(conn)
-    # list_keypairs(conn)
+    print_server_list(conn)
+    print_images_list(conn)
+    print_flavor_list(conn)
+    print_keypair_list(conn)
     print("Done")
-    # print("auth: {0}\n".format( conn.auth_url))
-    # print("project_name: {0}\n".format( conn.project_name))
-    # print("username: {0}\n".format( conn.username))
-    # print("password: {0}\n".format( conn.password))
+
+    """ end main() """
 
 if __name__ == '__main__':
     main()

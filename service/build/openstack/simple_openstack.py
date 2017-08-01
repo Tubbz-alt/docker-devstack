@@ -25,30 +25,26 @@ List resources from the Compute service.
 
 For a full guide see TODO(etoews):link to docs on developer.openstack.org
 """
-def list_servers(conn):
+def print_server_list(conn):
     print("List Servers:")
-
     for server in conn.compute.servers():
         print(server)
 
 
-def list_images(conn):
+def print_images_list(conn):
     print("List Images:")
-
     for image in conn.compute.images():
         print(image)
 
 
-def list_flavors(conn):
+def print_flavor_list(conn):
     print("List Flavors:")
-
     for flavor in conn.compute.flavors():
         print(flavor)
 
 
-def list_keypairs(conn):
+def print_keypair_list(conn):
     print("List Keypairs:")
-
     for keypair in conn.compute.keypairs():
         print(keypair)
 
@@ -90,18 +86,18 @@ def main():
     print("Obtaining credentials")
     conn = get_openstack_connection()    	
     print("Listing Images: ")
-    list_images(conn)
+    print_images_list(conn)
 
     print("Listing servers")
-    list_servers(conn)
+    print_server_list(conn)
     # print("Creating server...")
     # create_server(conn)
     print("Listing servers")
-    list_servers(conn)
-    # list_servers(conn)
-    # list_images(conn)
-    # list_flavors(conn)
-    # list_keypairs(conn)
+    print_server_list(conn)
+    # print_server_list(conn)
+    # print_images_list(conn)
+    # print_flavor_list(conn)
+    # print_keypair_list(conn)
     print("Done")
     # print("auth: {0}\n".format( conn.auth_url))
     # print("project_name: {0}\n".format( conn.project_name))
