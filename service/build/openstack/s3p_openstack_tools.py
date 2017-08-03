@@ -14,32 +14,18 @@ default_image=""
 default_flavor=""
 default_secgrp=""
 
-"""
-List resources from the Compute service.
-"""
+""" Utilities """
 def debug_print(stringIn=''):
     """ prints only when global debug_mode is set to True"""
     global debug_mode
     if debug_mode:
         print(stringIn)
 
+""" Print lists of resources """
 def print_server_list(conn):
     print("List Servers:")
     for server in conn.compute.servers():
         print(server)
-
-def list_servers_by_name(conn, filter=''):
-    # server_list = []
-    # for server in conn.compute.servers():
-    #     server_list.append(server.name)
-    server_list = [server.name for server in conn.compute.servers() if True]
-    return server_list
-
-def get_server_set(conn, prefix=''):
-    """ returns a set of servers in the cloud (assumes no duplicate names) """
-    server_set = { server.name for server in conn.compute.servers() 
-            if prefix in server.name }
-    return server_set
 
 def print_images_list(conn):
     print("List Images:")
@@ -61,63 +47,15 @@ def print_hypervisor_list(conn):
     for hypervisor in conn.compute.hypervisors():
         print(hypervisor)
 
-def get_hypervisor_set(conn, prefix=''):
-    """ Returns the set of hypervisors matching a name prefix """
-    hypervisor_set = { hypervisor.name for hypervisor in conn.compute.hypervisors()
-        if prefix in hypervisor.name }
-    return hypervisor_set
-
-def list_hypervisors_by_name(conn):
-    """Returns a list of active hypervisors by name"""
-    hypervisor_list=[]
-    for hypervisor in conn.compute.hypervisors():
-        debug_print(hypervisor.name)
-        hypervisor_list.append(hypervisor.name)
-    return hypervisor_list
-
 def print_project_id_list(conn):
     print("List project id's:")
     for project in conn.identityv2.projects():
         print(project)
 
-"""
-List resources from the network service.
-"""
-def get_server_detail(conn, server_name):
-    """ Returs an os_ServerDetail if name matches"""
-    server_list=[ server for server in  conn.compute.servers(details=True, name=server_name) ]
-    if len(server_list) == 1:
-        server = server_list[0]
-    else:
-        logprint("ERROR: server named '{0}' not found".format(server_name))
-        server = None
-    return server
-
-def list_networks(conn):
+def print_network_list(conn):
     print("List Networks:")
     for network in conn.network.networks():
         print(network)
-
-def get_network_set(conn, prefix=''):
-    """ Returns a set of the networks in the cloud with name prefix matching """
-    net_set = { net.name for net in conn.network.networks() if prefix in net.name }
-    return net_set
-
-def get_subnet_set(conn, name=''):
-    """ Returns a set of the subnets in the cloud with name matching """
-    subnet_set = { subnet.name for subnet in conn.network.subnets() if name in subnet.name }
-    return subnet_set
-
-def get_servers_set(conn, name=''):
-    """ Returns a set of the servers in the cloud with name matching """
-    server_set = { server.name for subnet in conn.compute.servers if name in server.name }
-    return server_set
-
-def list_networks_by_name(conn):
-    netlist=[]
-    for network in conn.network.networks():
-        netlist.append(network.name)
-    return netlist
 
 def print_subnet_list(conn):
     print("List Subnets:")
@@ -143,6 +81,86 @@ def print_net_availability_zones_list(conn):
     print("List availability zones:")
     for zone in conn.network.availability_zones():
         print(zone)
+
+""" List resources from the Compute service """
+def list_hypervisors_by_name(conn):
+    """Returns a list of active hypervisors by name"""
+    hypervisor_list=[]
+    for hypervisor in conn.compute.hypervisors():
+        debug_print(hypervisor.name)
+        hypervisor_list.append(hypervisor.name)
+    return hypervisor_list
+
+def get_hypervisor_hostId(conn, project_id, hypervisor_hostname):
+    """ determines the hostID for server creation
+        An undocumented "feature" of the SDK is that specifying a server's
+        target host cannot be done with 'hypervisor_hostname=hypervisor_hostname'
+        or by specifying the availability zone as in the CLI, the server's
+        intended destination may be specified as a hostId which is a hash
+        of the project ID and the hypervisor hostname
+        https://ask.openstack.org/en/question/6477/what-is-the-hostid-parameter-in-server-details/
+    """
+    sha_hash = hashlib.sha224(project_id + hypervisor_hostname)
+    return sha_hash.hexdigest()
+
+def get_hypervisor_set(conn, prefix=''):
+    """ Returns the set of hypervisors matching a name prefix """
+    hypervisor_set = { hypervisor.name for hypervisor in conn.compute.hypervisors()
+        if prefix in hypervisor.name }
+    return hypervisor_set
+
+def list_servers_by_name(conn, namefilter=''):
+    """ returns a list of servers in the cloud """
+    server_list = [ server.name for server in conn.compute.servers()
+            if namefilter in server.name ]
+    return server_list
+
+def get_server_set(conn, namefilter=''):
+    """ returns a set of servers in the cloud (assumes no duplicate names) """
+    server_set = { server.name for server in conn.compute.servers()
+            if namefilter in server.name }
+    return server_set
+
+def get_server_detail(conn, server_name):
+    """ Returs an os_ServerDetail if name matches"""
+    os_server_list=[ server for server in  conn.compute.servers(details=True, name=server_name) ]
+    if len(os_server_list) == 1:
+        os_server = os_server_list[0]
+    else:
+        logprint("ERROR: server named '{0}' not found".format(server_name))
+        os_server = None
+    return os_server
+
+""" List resources from the network service """
+def get_os_router(conn, router_name):
+    """ function wraps conn.network.find_router() """
+    return conn.network.find_router(router_name)
+
+def get_network_id(conn, network_name):
+    os_network = conn.network.find_network(network_name)
+    return os_network.id
+
+def get_network_name(conn, network_id):
+    os_network = conn.network.find_network(network_id)
+    return os_network.name
+
+def get_network_set(conn, namefilter=''):
+    """ Returns a set of the networks in the cloud with namefilter matching """
+    net_set = { net.name for net in conn.network.networks()
+            if namefilter in net.name }
+    return net_set
+
+def get_subnet_set(conn, namefilter=''):
+    """ Returns a set of the subnets in the cloud with namefilter matching """
+    subnet_set = { subnet.name for subnet in conn.network.subnets()
+            if namefilter in subnet.name }
+    return subnet_set
+
+def list_networks_by_name(conn):
+    netlist=[]
+    for network in conn.network.networks():
+        netlist.append(network.name)
+    return netlist
 
 """
 Create a project network and subnet.
@@ -179,10 +197,6 @@ def create_network(conn, network_index):
     debug_print(example_subnet)
     return example_network
 
-def get_os_router(conn, router_name):
-    """ function wraps conn.network.find_router() """
-    return conn.network.find_router(router_name)
-
 def router_add_subnet(conn, os_router, subnet_id):
     """ function wraps conn.network.router_add_interface() """
     conn.network.router_add_interface( os_router, subnet_id )
@@ -197,9 +211,7 @@ def router_remove_subnet(conn, os_router, subnet_id):
         print("WARNING: Subnet id {0} has no interface on {1}".format(subnet_id, os_router.name))
 
 def remove_subnet_ports_from_router(conn, os_router, subnet_id):
-    # # remove network ports (subnet interfaces) from router
-    #   for port_id in os_network.ports():
-    #       router_remove_subnet(conn, os_router, port_id)
+    """ remove network ports (subnet interfaces) from router """
     ports_to_remove = [ port for port in conn.network.ports()
         if ((port.device_owner == 'network:router_interface') &
             (port['fixed_ips'][0]['subnet_id'] == subnet_id)) ]
@@ -211,58 +223,64 @@ def remove_subnet_ports_from_router(conn, os_router, subnet_id):
 def delete_network(conn, os_network, router_name='router1'):
     debug_print("Delete Network:")
     os_router = conn.network.find_router(router_name)
-    #os_network = conn.network.find_network(network_name)
-    # print("net name: {0}".format(os_network.name))
-    if os_network != None:
-        # remove subnet interfaces from router and delete subnets
-        for subnet_id in os_network.subnet_ids:
-            router_remove_subnet(conn, os_router, subnet_id)
-            conn.network.delete_subnet(subnet_id, ignore_missing=False)
-        conn.network.delete_network(os_network, ignore_missing=False)
+    # remove subnet interfaces from router and delete subnets
+    for subnet_id in os_network.subnet_ids:
+        router_remove_subnet(conn, os_router, subnet_id)
+        conn.network.delete_subnet(subnet_id, ignore_missing=False)
+    conn.network.delete_network(os_network, ignore_missing=False)
 
 """
 Create resources
 """
+def create_server_raw(conn, attrs, wait_for_server=True):
+    """ method wraps the conn.compute.create_server() method """
+    os_server = conn.compute.create_server(**attrs)
+    if wait_for_server:
+        os_server = conn.compute.wait_for_server(os_server)
+    return os_server
 
-def get_hypervisor_hostId(conn, project_id, hypervisor_hostname):
-    """ determines the hostID for server creation
-        An undocumented "feature" of the SDK is that specifying a server's
-        target host cannot be done with 'hypervisor_hostname=hypervisor_hostname'
-        or by specifying the availability zone as in the CLI, the server's
-        intended destination may be specified as a hostId which is a hash
-        of the project ID and the hypervisor hostname
-        https://ask.openstack.org/en/question/6477/what-is-the-hostid-parameter-in-server-details/
-    """
-    sha_hash = hashlib.sha224(project_id + hypervisor_hostname)  
-    return sha_hash.hexdigest()
+def create_server(conn,
+        server_name,
+        image_id,
+        flavor_id,
+        network_id,
+        secgrp_name='',
+        hypervisor_name='',
+        project_id=''):
+    """ Creates a server instance with the supplied properties.
+        WIP: If a hypervisor hostname is supplied, OpenStack is asked to
+        place the server on that hypervisor."""
+    attrs = {
+            'name': server_name,
+            'image_id': image_id,
+            'flavor_id': flavor_id,
+            'networks':[{"uuid": network_id}]
+            }
+    if secgrp_name != '':
+        attrs['security_groups'] = [{'name': secgrp_name}]
 
-def create_server_raw(conn, server_name, hypervisor_name, network_name,
-        image_id_in, flavor_id_in, secgrp_name, project_id):
-    os_hypervisor = conn.compute.find_hypervisor(hypervisor_name)
-    host_ID = get_hypervisor_hostId(conn, project_id, hypervisor_name)
-    print(host_ID)
-    print(os_hypervisor.id)
+    if hypervisor_name != '':
+        print("Creating server on {0}".format(hypervisor_name))
+        os_hypervisor = conn.compute.find_hypervisor(hypervisor_name)
+        hostId = get_hypervisor_hostId(conn, project_id, hypervisor_name)
+        print(hostId)
+        print(os_hypervisor.id)
+        if not(os_hypervisor.name == hypervisor_name):
+            print("ERROR: found wrong hypervisor:")
+            print("hypervisor_name = {0}".format(hypervisor_name))
+            print("hypervisor found: {0}".format(os_hypervisor.name))
+            print("hypervisor detail: {0}".format(os_hypervisor))
+        """ the server params in the following dict cause a
+            "Bad Request (400)" exception """
+        bad_attrs = {'project_id': project_id,'hostId': os_hypervisor.id }
+        # add "hostId" to attrs
+        attrs['hostId'] = hostId
+ 
+    os_server = create_server_raw(conn, attrs)
+    return os_server
 
-    if not(os_hypervisor.name == hypervisor_name):
-        print("ERROR: found wrong hypervisor:")
-        print("hypervisor_name = {0}".format(hypervisor_name))
-        print("hypervisor found: {0}".format(os_hypervisor.name))
-        print("hypervisor detail: {0}".format(os_hypervisor))
-    os_network = conn.network.find_network(network_name)
-    print("server_name: {0}\nhypervisor_name: {1}\nnetwork_name: {2}".format(server_name, hypervisor_name, network_name))
-    server = conn.compute.create_server(
-        name = server_name,
-        image_id = image_id_in,
-        flavor_id = flavor_id_in,
-        host_id = host_ID,
-        security_groups = [{"name":secgrp_name}],
-        networks = [{"uuid": os_network.id}])
-    server = conn.compute.wait_for_server(server)
-    print("Server '{0}' created on {1}".format(server.name, server.availability_zone))
-    # print("Server IP address={ip}".format(ip=server.addresses))
-    return server
 
-def create_server(conn, s3p_server_name, s3p_hypervisor, s3p_network):
+def create_server_old(conn, s3p_server_name, s3p_hypervisor, s3p_network):
     global default_image
     global default_flavor
     global default_secgrp
@@ -270,7 +288,6 @@ def create_server(conn, s3p_server_name, s3p_hypervisor, s3p_network):
         print("Image ID for Image {0} = {1}".format(IMAGE_NAME,default_image.id))
         print("Flavor ID for flavor {0} = {1}".format(FLAVOR_NAME,default_flavor.id))
         print("Security Group ID for '{0}' = {1}".format(SEC_GRP_NAME, default_secgrp.id))
-
     if not(debug_mode):
         compute_host = conn.compute.find_hypervisor(s3p_hypervisor)
         print("compute_host={0}".format(compute_host))

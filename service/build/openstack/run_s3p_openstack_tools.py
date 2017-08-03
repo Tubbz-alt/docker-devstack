@@ -26,7 +26,7 @@ def main():
         s3p.create_server(conn, server_name, compute_host)
 
         # List network resources
-        s3p.list_networks(conn)
+        s3p.print_network_list(conn)
         print("")
         s3p.list_subnets(conn)
         print("")

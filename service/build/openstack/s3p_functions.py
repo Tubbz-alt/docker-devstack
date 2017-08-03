@@ -8,13 +8,15 @@ from time import sleep
 
 debug_mode=False
 verbosity_level=0
-validate_existing = False
+# cloud test control: check main() for definition of cloud_info using these
+validate_existing = True
 attach_to_router=True
+pin_instances = True
+
 network_list=[]
 subnet_list=[]
 hypervisor_list=[]
 hypervisor_set=set()
-server_list=[]
 server_set = set()
 
 def isodate():
@@ -46,7 +48,7 @@ def get_auth_args():
     }
     return auth_args
 
-def create_instance(conn, instance_name, hypervisor_name, network_name,
+def create_instance(conn, instance_name, hypervisor_name, network_id,
         resource_ids, smoketest=True):
     """
     Creates an S3P server (OpenStack tenant instance) on the specified
@@ -54,32 +56,46 @@ def create_instance(conn, instance_name, hypervisor_name, network_name,
     """
     global validate_existing
     debug_print("validate_existing = {0}".format(validate_existing), 2)
-    global server_list
     global server_set
+    global cloud_info
     """ check if instance is already created """
     if not(instance_name in server_set):
         # create instance
-        pass
-    else:
-        # instance exists, get details
-        pass
-
-    if not(instance_name in server_list):
-        # create instance
-        logprint("Creating server {0} on host {1}, network {2}".format(
-            instance_name, hypervisor_name, network_name))
+        network_name = s3p.get_network_name(conn, network_id)
+        logmsg = "Creating server {0} on network {1}".format(
+                instance_name, network_name)
+        if not(cloud_info['pin_instances']):
+            # unset the hypervisor hostname if don't need to pin instances to hosts
+            hypervisor_name=''
+        else:
+            logmsg = logmesg + ", on host {0}".format(hypervisor_name)
+        logprint(logmsg)
         t1=datetime.now()
-        attrs = {
-                'name': server_name,
-                'image_id': image_id,
-                'flavor_id': flavor_id,
-                'security_groups':[{"name":secgrp_name}],
-                'networks':[{"uuid":network.id}],
-                'host_id':'293160ef6974833cdedf022f11b3dbf5d259455f3219f9f28dd5ec52'
-                }
-        os_instance = s3p.create_server_raw(conn, instance_name, hypervisor_name,
-                network_name, resource_ids['image_id'],
-                resource_ids['flavor_id'], s3p_defaults['secgrp_name']
+        # attrs = {
+        #         'name': server_name,
+        #         'image_id': image_id,
+        #         'flavor_id': flavor_id,
+        #         'security_groups':[{"name":secgrp_name}],
+        #         'networks':[{"uuid":network.id}],
+        #         'host_id':'293160ef6974833cdedf022f11b3dbf5d259455f3219f9f28dd5ec52'
+        #         }
+        # os_instance = s3p.create_server_raw(conn,
+        #         instance_name,
+        #         hypervisor_name,
+        #         network_name,
+        #         resource_ids['image_id'],
+        #         resource_ids['flavor_id'],
+        #         cloud_info['secgrp_name'],
+        #         resource_ids['project_id']
+        #         )
+        os_instance = s3p.create_server(conn,
+                instance_name,
+                resource_ids['image_id'],
+                resource_ids['flavor_id'],
+                network_id,
+                cloud_info['secgrp_name'],
+                hypervisor_name,
+                resource_ids['project_id']
                 )
         t2=datetime.now()
         debug_print( "os_instance = {0}".format(os_instance) , 3)
@@ -91,7 +107,6 @@ def create_instance(conn, instance_name, hypervisor_name, network_name,
             sys.exit(1)
         else:
             logprint("Server Creation took {0} seconds".format((t2-t1).total_seconds()))
-            server_list.append(os_instance.name)
             server_set.add(os_instance.name)
     else:
         os_instance = s3p.get_server_detail(conn, instance_name)
@@ -102,7 +117,7 @@ def create_instance(conn, instance_name, hypervisor_name, network_name,
         smoketest = validate_existing
 
     if smoketest:
-        os_network = conn.network.find_network(network_name)
+        os_network = conn.network.find_network(network_id)
         debug_print("os_instance = {0}".format(os_instance), 3)
         smoke_test_server(conn, os_instance, os_network)
 
@@ -122,7 +137,7 @@ def smoke_test_server(conn, os_instance, os_network):
     NETNS = 'qdhcp-' + os_network.id
     logprint("Server '{0}' obtained IPV4 address: {1}".format(os_instance.name, ip_addr))
     """ enter netns and ping instance IP """
-    command  = "ip netns exec qdhcp-" + os_network.id + " ping -c 1 " + ip_addr
+    command  = "sudo ip netns exec qdhcp-" + os_network.id + " ping -c 1 " + ip_addr
     debug_print("Smoke test: {0}".format(command), 2)
     """ TODO: This smoke test is very coarse - could be much better"""
     t1 =datetime.now()
@@ -164,12 +179,12 @@ def determine_net_index(comp_id, num_networks, host_id, numberingType='one_net')
         networkIdx = 0
     return networkIdx
 
-def create_security_group_and_rules(conn, secgrp_name):
+def create_security_group_and_rules(conn, secgrp_name, project_id):
     """creates s3p security group and adds rules for SSH and ICMP """
     os_security_group = conn.network.find_security_group(secgrp_name)
     if os_security_group == None:
         logprint("Creating security group {0}".format(secgrp_name))
-        os_security_group = s3p.create_security_group(conn, secgrp_name)
+        os_security_group = s3p.create_security_group(conn, secgrp_name, project_id)
         s3p.add_security_group_rules_ssh(conn, os_security_group.id)
         s3p.add_security_group_rules_icmp(conn, os_security_group.id)
     else:
@@ -183,20 +198,24 @@ def create_network_and_subnet(conn, network_name, network_ix):
     router_name = 'router1'
     network_set = s3p.get_network_set(conn)
     if network_name in network_set:
-        debug_print("WARNING: an OpenStack network with name '{0}' already exists - skipping creation.".format(
+        debug_print("Using existing OpenStack network with name '{0}'".format(
             network_name), 1)
         os_network = conn.network.find_network(network_name)
     else:
         logprint("Creating OpenStack network with name: {0}".format(network_name))
+        t1 = datetime.now()
         os_network = s3p.create_network_raw(conn, network_name)
+        t2 = datetime.now()
         network_set.add(os_network.name)
         network_list.append(os_network.name)
         if os_network != None:
+            logprint("Network Creation: {0} seconds".format((t2-t1).total_seconds()))
             subnet_name = network_name+'-sub'
             parent_network_id = os_network.id
             cidr = '10.0.'+str(network_ix)+'.0/24'
             gateway_ip = '10.0.'+str(network_ix)+'.1'
             logprint("Creating OpenStack subnet with name: {0}".format(network_name+"-sub"))
+            t1 = datetime.now()
             os_subnet = s3p.create_subnet_raw(
                     conn,
                     subnet_name,
@@ -206,6 +225,8 @@ def create_network_and_subnet(conn, network_name, network_ix):
             if attach_to_router:
                 os_router = s3p.get_os_router(conn, router_name)
                 s3p.router_add_subnet(conn, os_router, os_subnet.id)
+            t2 = datetime.now()
+            logprint("Subnet Creation: {0} seconds".format((t2-t1).total_seconds()))
         else:
             logprint("ERROR: Failed to create openstack network '{0}'".format(
                 network_name))
@@ -224,40 +245,28 @@ def delete_network_and_subnet(conn, os_network):
     logprint("Network \"{0}\" Successfully deleted".format(name))
 
 # cleanup
-def cleanup(conn):
+def cleanup(conn, cloud_info):
     """removes all allocated OpenStack resources incl. servers, networks, subnets"""
-    global server_list
     global server_set
     global network_list
     global network_set
+    logprint("Removing instances and networks from OpenStack Cloud...")
     # delete servers
-    # server_list = s3p.list_servers_by_name(conn)
-    # for server_name in server_list:
-    #     delete_instance(conn, server_name)
-    # server_list = []
-    # list comprehension to delete all s3p servers ('tenant-')
-    server_prefix = s3p_defaults['server_prefix']
-    [ delete_instance(conn, server.id) for server in conn.compute.servers()
-            if server_prefix in server.name ]
-    server_list = s3p.list_servers_by_name(conn)
+    server_prefix = cloud_info['server_prefix']
+    for server in conn.compute.servers():
+        if server_prefix in server.name:
+            delete_instance(conn, server.id)
+
     server_set = s3p.get_server_set(conn)
 
     # delete networks
-    # network_list = s3p.list_networks_by_name(conn)
-    # for network_name in network_list:
-    #     delete_network_and_subnet(conn, network_name)
-    # network_list = []
-    # use a list comprehension to delete the s3p networks.  It's scary, but works beautifully
-    # [ delete_network_and_subnet(conn, network) for network in conn.network.networks()
-    #         if s3p_defaults['network_prefix'] in network.name ]
-    # this should be a for loop so it's more clear - this doesn't make much sense on inspection
-    net_prefix = s3p_defaults['network_prefix']
+    net_prefix = cloud_info['network_prefix']
     for network in conn.network.networks():
         if net_prefix in network.name:
             name = network.name
             delete_network_and_subnet(conn, network)
     network_list  = s3p.list_networks_by_name(conn)
-    network_set = s3p.get_network_set(conn, s3p_defaults['network_prefix'])
+    network_set = s3p.get_network_set(conn, cloud_info['network_prefix'])
 
 # COMPLETED:
 def unit_tests(conn):
@@ -274,7 +283,7 @@ def unit_tests(conn):
     s3p.create_server(conn, server_name, compute_host)
 
     # List network resources
-    s3p.list_networks(conn)
+    s3p.print_network_list(conn)
     print("")
     s3p.print_subnet_list(conn)
     print("")
@@ -295,8 +304,11 @@ def unit_tests(conn):
 
 def get_resource_ids(conn, names):
     """gets resource identifiers (OpenStack resource IDs) for default resources"""
+    defaults = {}
+    # get project id
+    os_project = conn.identity.find_project(names['project_name'])
+    defaults['project_id'] = os_project.id
     # get security group id
-    defaults = {'secgrp_id': None, 'image_id': None, 'flavor_id': None}
     os_secgrp = conn.network.find_security_group(names['secgrp_name'])
     defaults['secgrp_id'] = os_secgrp.id
     # get image id
@@ -305,8 +317,8 @@ def get_resource_ids(conn, names):
     # get flavor id
     os_flavor = conn.compute.find_flavor(names['flavor_name'])
     defaults['flavor_id'] = os_flavor.id
-
     debug_print("S3P Resource IDs:", 2)
+    debug_print("{0}: {1}".format(names['project_name'], defaults['project_id']), 2)
     debug_print("{0}: {1}".format(names['secgrp_name'], defaults['secgrp_id']), 2)
     debug_print("{0}: {1}".format(names['image_name'], defaults['image_id']), 2)
     debug_print("{0}: {1}".format(names['flavor_name'], defaults['flavor_id']), 2)
@@ -322,37 +334,6 @@ def parse_ids_from_hypervisor_name(hypervisor_name):
     comp_id = hypervisor_name.split('-')[2]
     return host_id, comp_id
 
-def one_shot_create(conn):
-    """ use a specific hypervisor """
-    # phys_host_id = 5
-    # comp_id = 11
-    # hypervisor_ID = str(phys_host_id) + '-' + str(comp_id)
-    # hypervisor_name = 'compute-' + hypervisor_ID
-
-    num_networks = 1
-    servers_per_host = 1
-    net_numbering_type = 'one_per_wave'
-    # only create one tenant per host for now
-    instance_name = 'tenant-' + hypervisor_ID + '-1'
-    network_ix = determine_net_index(
-            comp_id,
-            num_networks,
-            phys_host_id,
-            net_numbering_type)
-    network_name = 's3p-net-' + str(network_ix)
-
-    network_id = create_network_and_subnet(conn,
-            network_name,
-            network_ix)
-
-    create_instance(conn,
-            instance_name,
-            hypervisor_name,
-            network_id)
-
-    delete_instance(conn, instance_name)
-
-
 
 """
 " main testing loop
@@ -363,10 +344,10 @@ def main():
     global subnet_list
     global hypervisor_list
     global hypervisor_set
-    global server_list
     global server_set
+
     global debug_mode
-    global s3p_defaults
+    global cloud_info
     global verbosity_level
     global attach_to_router
     verbosity_level=0
@@ -412,31 +393,50 @@ def main():
     logprint("Obtaining OpenStack credentials")
     conn = s3p.get_openstack_connection()
 
-    s3p_defaults = {'secgrp_name': 's3p_secgrp',
+    cloud_info = {
+            'project_name': 'demo',
+            'secgrp_name': 's3p_secgrp',
             'image_name': 'cirros-0.3.4-x86_64-uec',
             'flavor_name': 'cirros256',
             'network_prefix': 's3p-net-',
             'server_prefix': 'tenant-',
-            'attach_to_router': True
+            'attach_to_router': True,
+            'pin_instances': False,
+            'validate_existing': True
             }
-    attach_to_router = s3p_defaults['attach_to_router']
+    attach_to_router = cloud_info['attach_to_router']
+    validate_existing = cloud_info['validate_existing']
+    pin_instances = cloud_info['pin_instances']
 
-    s3p_resource_ids = get_resource_ids(conn, s3p_defaults)
+    os_project = conn.identity.find_project(cloud_info['project_name'])
+    # create security group if it doesn't yet exist
+    os_secgrp = create_security_group_and_rules(conn,
+            cloud_info['secgrp_name'], os_project.id)
+
+    s3p_resource_ids = get_resource_ids(conn, cloud_info)
 
 
     if cleanup_mode:
         # cleanup resources
         # TODO: ask user if they REALLY want to delete all the servers and networks in the cluster
-        cleanup(conn)
+        # server_set = s3p.get_server_set(conn)
+        # network_set = s3p.get_network_set(conn)
+        print("WARNING:: You are about to remove\n" +
+                "\tall server instances matching '{0}' \n".format(cloud_info['server_prefix']) +
+                "\tall networks matching '{0}'\n".format(cloud_info['network_prefix']))
+        answer = raw_input('Are you sure you want to proceed? ')
+        if (answer == 'y') | (answer == 'Y' ):
+            cleanup(conn, cloud_info)
+        else:
+            logprint("Cleanup operation aborted - no changes to cloud.")
     else:
         """ Assumptions:
             quotas and s3p_secgrp are alreay created
-        create_security_group(conn, s3p_defaults.secgrp_name)
         """
         # get list of networks by name
         network_list = s3p.list_networks_by_name(conn)
         debug_print("Network list: {0}".format(network_list), 2)
-        network_set = s3p.get_network_set(conn, s3p_defaults['network_prefix'])
+        network_set = s3p.get_network_set(conn, cloud_info['network_prefix'])
         debug_print("Network set: {0}".format(network_set), 2)
 
         # get list of hypervisors by name
@@ -446,10 +446,8 @@ def main():
         debug_print("Hypervisor Set:  {0}".format(hypervisor_set ), 2)
 
         # get list of servers by name
-        server_list = s3p.list_servers_by_name(conn)
         server_set = s3p.get_server_set(conn)
 
-        debug_print("Server List: {0}".format(server_list), 2)
         debug_print("Server Set: {0}".format(server_set), 2)
 
         servers_per_host = 1
@@ -482,15 +480,15 @@ def main():
             create_instance(conn,
                 instance_name,
                 hypervisor_name,
-                network_name,
-                s3p_resource_ids)
+                network_id,
+                s3p_resource_ids,
+		        smoketest=True)
 
             t2 = datetime.now()
             debug_print("Server and network creation took {0} s".format((t2-t1).total_seconds()), 1)
 
         # subnet_list = s3p.print_subnet_list(conn)
         # hypervisor_list = s3p.print_hypervisor_list(conn)
-        # server_list = s3p.print_server_list(conn)
 
     logprint("Done")
 
