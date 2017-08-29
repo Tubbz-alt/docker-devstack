@@ -82,8 +82,30 @@ function fn_create_instance {
     fi
 }
 
+function fn_get_hypervisor_list {
+    local list_order=${1}
+    case "$list_order" in
+        oldest_first)
+            # # hypervisor list with oldest members of cluster sorted first
+            fn_print "INFO: Spawning instances on OLDEST hypervisors first"
+            HYPERVISOR_LIST_OLD_FIRST=$(openstack compute service list \
+                --service nova-compute -f value -c Host -c Status | \
+                grep enabled | cut -d ' ' -f 1)
+            HYPERVISOR_LIST=${HYPERVISOR_LIST_OLD_FIRST}
+            ;;
+        newest_first)
+            # hypervisor list with newest cluster members first
+            fn_print "INFO: Spawning instances on NEWEST hypervisors first"
+            HYPERVISOR_LIST_NEW_FIRST=$(openstack compute service list \
+                --service nova-compute  -c Host -c Status -c ID -f value | \
+                grep enabled | sort -rg | cut -d ' ' -f 2)
+            HYPERVISOR_LIST=$HYPERVISOR_LIST_NEW_FIRST
+            ;;
+    esac
+}
+
 function fn_determine_net_index {
-    TYPE=one_per_physhost
+    TYPE=modulo_num_networks
     case "$TYPE" in
         modulo_num_networks)
             # network index is modulo num_networks
@@ -214,6 +236,7 @@ function fn_delete_all_networks {
     done
 }
 
+
 # defaults:
 FLAVOR="cirros256"
 IMAGE="cirros-0.3.4-x86_64-uec"
@@ -229,7 +252,7 @@ S3P_TENANT_PREFIX="tenant-"
 
 # test profile
 SERVERS_PER_HOST=1
-NUM_NETWORKS=6
+NUM_NETWORKS=10
 SUBNET_IX=1
 ATTACH_TO_ROUTER=True
 
@@ -255,11 +278,8 @@ else
     NETWORK_LIST="$(openstack network list -f value -c Name)"
     SUBNET_LIST="$(openstack subnet list -f value -c Name)"
     SERVER_LIST="$(openstack server list -f value -c Name)"
-    # hypervisor list with newest cluster members first
-    HYPERVISOR_LIST_NEW_FIRST=$(openstack compute service list --service nova-compute  -c Host -c Status -c ID -f value | grep enabled | sort -rg | cut -d ' ' -f 2)
-    # # hypervisor list with oldest members of cluster sorted first
-    # HYPERVISOR_LIST_OLD_FIRST=$(openstack compute service list --service nova-compute -f value -c Host -c Status | grep enabled | cut -d ' ' -f 1)
-    HYPERVISOR_LIST=$HYPERVISOR_LIST_NEW_FIRST
+    hypervisor_list_order=oldest_first
+    fn_get_hypervisor_list $hypervisor_list_order
     for (( TENANT_INDEX=1; TENANT_INDEX<=${SERVERS_PER_HOST} ; TENANT_INDEX++ )); do
         for HYPERVISOR in $HYPERVISOR_LIST; do
             fn_print "Checking tenant index #${TENANT_INDEX} on hypervisor $HYPERVISOR..."
