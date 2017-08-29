@@ -4,6 +4,7 @@ from datetime import datetime
 import argparse
 import sys
 import os
+import pdb
 from time import sleep
 
 debug_mode=False
@@ -68,26 +69,9 @@ def create_instance(conn, instance_name, hypervisor_name, network_id,
             # unset the hypervisor hostname if don't need to pin instances to hosts
             hypervisor_name=''
         else:
-            logmsg = logmesg + ", on host {0}".format(hypervisor_name)
+            logmsg = logmsg + ", on host {0} with CLI library".format(hypervisor_name)
         logprint(logmsg)
         t1=datetime.now()
-        # attrs = {
-        #         'name': server_name,
-        #         'image_id': image_id,
-        #         'flavor_id': flavor_id,
-        #         'security_groups':[{"name":secgrp_name}],
-        #         'networks':[{"uuid":network.id}],
-        #         'host_id':'293160ef6974833cdedf022f11b3dbf5d259455f3219f9f28dd5ec52'
-        #         }
-        # os_instance = s3p.create_server_raw(conn,
-        #         instance_name,
-        #         hypervisor_name,
-        #         network_name,
-        #         resource_ids['image_id'],
-        #         resource_ids['flavor_id'],
-        #         cloud_info['secgrp_name'],
-        #         resource_ids['project_id']
-        #         )
         os_instance = s3p.create_server(conn,
                 instance_name,
                 resource_ids['image_id'],
@@ -169,11 +153,11 @@ def determine_net_index(comp_id, num_networks, host_id, numberingType='one_net')
                         a.k.a. "Horizontal networks"
         """
     if numberingType == 'modulo_num_networks':
-        networkIdx = comp_id % num_networks
+        networkIdx = int(comp_id) % num_networks
     elif numberingType == 'one_per_wave':
-        networkIdx = comp_id
+        networkIdx = int(comp_id)
     elif numberingType == 'one_per_physhost':
-        networkIdx = host_id
+        networkIdx = int(host_id)
     else:
         """ one network to rule them all """
         networkIdx = 0
@@ -401,7 +385,7 @@ def main():
             'network_prefix': 's3p-net-',
             'server_prefix': 'tenant-',
             'attach_to_router': True,
-            'pin_instances': False,
+            'pin_instances': True,
             'validate_existing': True
             }
     attach_to_router = cloud_info['attach_to_router']
@@ -451,11 +435,9 @@ def main():
         debug_print("Server Set: {0}".format(server_set), 2)
 
         servers_per_host = 1
-        max_networks = 25
-        #len(hypervisor_list)
+        max_networks = 6
 
-
-        net_numbering_type = 'one_per_wave'
+        net_numbering_type = 'modulo_num_networks'
 
         # loop through hypervisors, creating tenants on each
         for hypervisor_name in hypervisor_list:

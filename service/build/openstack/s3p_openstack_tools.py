@@ -5,6 +5,7 @@ from openstack import connection
 import errno
 import os
 import hashlib
+import pdb
 
 FLAVOR_NAME='cirros256'
 SEC_GRP_NAME='s3p_secgrp'
@@ -239,6 +240,49 @@ def create_server_raw(conn, attrs, wait_for_server=True):
         os_server = conn.compute.wait_for_server(os_server)
     return os_server
 
+def create_server_CLI(conn, attrs):
+    """
+    In order to work around the strange SDK behavior that does not allow
+    creating a server on a particular hypervisor without loading extensions,
+    this function creates a server via the CLI (it's hacky, I get it).
+    Functinoality should resemble that in
+    creete_and_wait.sh:fn_creaet_instance:
+            openstack server create --flavor $FLAVOR --security-group $S3P_SEC_GRP_ID \
+                --image $IMAGE $ZONE --nic net-id=$NETWORK_ID $SERVER_NAME
+    attrs = {
+            'name': server_name,
+            'image_id': image_id,
+            'flavor_id': flavor_id,
+            'networks':[{"uuid": network_id}]
+            }
+    """
+    secgrps = attrs['security_groups']
+    secgrps = secgrps[0]
+    secgrp_name = secgrps['name']
+    command = "openstack server create --flavor {0} \
+        --security-group {1} --image {2} \
+        --availability-zone nova:{3} --nic net-id={4} \
+        {5}".format(
+            attrs['flavor_id'],
+            secgrp_name,
+            attrs['image_id'],
+            attrs['hypervisor_hostname'],
+            attrs['networks'][0]['uuid'],
+            attrs['name'])
+    response = os.system(command)
+    if response == 0:
+        # server creation was successful - return the server object
+        os_server = get_server_detail(conn, attrs['name'])
+        while len(os_server.addresses) == 0:
+            # wait for server to obtain an address
+            print("Waiting for OpenStack instance {0} to obtain an IP address".format(attrs['name']))
+            os_server = get_server_detail(conn, attrs['name'])
+    else:
+        os_server = None
+        print("ERROR: Openstack CLI failed to create server '{0}'".format(
+            attrs['name']))
+    return os_server
+
 def create_server(conn,
         server_name,
         image_id,
@@ -259,25 +303,31 @@ def create_server(conn,
     if secgrp_name != '':
         attrs['security_groups'] = [{'name': secgrp_name}]
 
-    if hypervisor_name != '':
+        """ If hypervisor_name is not empty, we will attempt to spawn an
+        instance on THAT hypervisor, else, let OpenStack decide"""
         print("Creating server on {0}".format(hypervisor_name))
         os_hypervisor = conn.compute.find_hypervisor(hypervisor_name)
         hostId = get_hypervisor_hostId(conn, project_id, hypervisor_name)
-        print(hostId)
-        print(os_hypervisor.id)
+        # print(hostId)
+        # print(os_hypervisor.id)
         if not(os_hypervisor.name == hypervisor_name):
             print("ERROR: found wrong hypervisor:")
             print("hypervisor_name = {0}".format(hypervisor_name))
             print("hypervisor found: {0}".format(os_hypervisor.name))
             print("hypervisor detail: {0}".format(os_hypervisor))
-        """ the server params in the following dict cause a
+            """ the server params in the following dict cause a
             "Bad Request (400)" exception """
+        else:
+            # add "hostId" to attrs
+            attrs['hostId'] = hostId
+            attrs['hypervisor_hostname'] = hypervisor_name
+
         bad_attrs = {'project_id': project_id,'hostId': os_hypervisor.id }
-        # add "hostId" to attrs
-        attrs['hostId'] = hostId
- 
-    os_server = create_server_raw(conn, attrs)
+        os_server = create_server_CLI(conn, attrs)
+    else:
+        os_server = create_server_raw(conn, attrs)
     return os_server
+
 
 
 def create_server_old(conn, s3p_server_name, s3p_hypervisor, s3p_network):
