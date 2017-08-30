@@ -4,7 +4,7 @@
 # or overided below by uncommenting:
 set -o nounset # throw an error if a variable is unset to prevent unexpected behaviors
 STACK_PASS="stack"
-SERVICE_HOST=${SERVICE_HOST:-192.168.3.2}
+SERVICE_HOST=${SERVICE_HOST:-10.129.20.2}
 # ODL_NETWORK should be set in the 'docker run' script
 ODL_NETWORK=${ODL_NETWORK}
 DEVSTACK_HOME="/home/stack/devstack"
@@ -19,7 +19,9 @@ TAG_NAME="origin/${BRANCH_NAME}"
 echo "stack:$STACK_PASS" | sudo chpasswd
 
 # get container IP
-ip=`/sbin/ip -o -4 addr list ethphys01 | awk '{print $4}' | cut -d/ -f1`
+export mgmt_veth_name="ethmgmt"
+export data_veth_name="ethdata"
+ip=`/sbin/ip -o -4 addr list $mgmt_veth_name | awk '{print $4}' | cut -d/ -f1`
 [ -z "$( echo $no_proxy | grep "$(hostname)" )" ] && export no_proxy="${no_proxy},$(hostname)"
 [ -z "$( echo $no_proxy | grep "${ip}" )" ] && export no_proxy="${no_proxy},${ip}"
 [ -z "$( echo $no_proxy | grep "${SERVICE_HOST}" )" ] && export no_proxy="${no_proxy},${SERVICE_HOST}"
@@ -59,6 +61,10 @@ $DEVSTACK_HOME/stack.sh
 if [ $? = 0 ] ; then
     echo "$(hostname) stacking successful at $(date)" >> stacking.status
     /home/stack/devstack/tools/info.sh >> stacking.status
+    source $DEVSTACK_HOME/openrc admin demo
+    printenv | grep OS_ | sed 's/^OS_/export OS_/g' > $HOME/openstackrc
+    sed -i "s/^#.*\(OFFLINE.*$\)/\1/" $SRC_CONF
+    sed -i "s/^#.*\(RECLONE.*$\)/\1/" $SRC_CONF
 fi
 
 # vim: set et ts=4 sw=4 :
