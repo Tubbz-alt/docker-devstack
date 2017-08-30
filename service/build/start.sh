@@ -62,9 +62,9 @@ if [ $? = 0 ] ; then
     echo "$(hostname) stacking successful at $(date)" >> stacking.status
     /home/stack/devstack/tools/info.sh >> stacking.status
     source $DEVSTACK_HOME/openrc admin demo
-    printenv | grep OS_ | sed 's/^OS_/export OS_/g' > $HOME/openstackrc
-    sed -i "s/^#.*\(OFFLINE.*$\)/\1/" $SRC_CONF
-    sed -i "s/^#.*\(RECLONE.*$\)/\1/" $SRC_CONF
+    printenv | grep OS_ | sed 's/^OS_/export OS_/g' > /home/stack/openstackrc
+    sed -i "s/^#.*\(OFFLINE.*$\)/\1/" /home/stack/$SRC_CONF
+    sed -i "s/^#.*\(RECLONE.*$\)/\1/" /home/stack/$SRC_CONF
 fi
 
 # vim: set et ts=4 sw=4 :
