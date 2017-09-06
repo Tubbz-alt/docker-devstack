@@ -32,6 +32,11 @@ sudo sed -i 's:^bind-address.*:#&:' /etc/mysql/my.cnf
 # allow services to start
 sudo sed -i 's:^exit .*:exit 0:' /usr/sbin/policy-rc.d
 
+# remove OVS db (for case of restacking a node to regenerate UUID)
+sudo systemctl stop openvswitch-switch.service
+sudo rm -rf /etc/openvswitch/conf.db
+sudo systemctl start openvswitch-switch.service
+
 # remove any dead screen sessions from previous stacking
 screen -wipe
 
