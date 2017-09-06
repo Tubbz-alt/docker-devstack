@@ -16,10 +16,14 @@ TAG_NAME="origin/${BRANCH_NAME}"
 echo "stack:$STACK_PASS" | sudo chpasswd
 
 # get container IP
-ip=`/sbin/ip -o -4 addr list ethphys01 | awk '{print $4}' | cut -d/ -f1`
+export mgmt_veth_name=ethmgmt
+export data_veth_name=ethdata
+ip=`/sbin/ip -o -4 addr list ${mgmt_veth_name} | awk '{print $4}' | cut -d/ -f1`
 
 # remove OVS db (for case of restacking a node to regenerate UUID)
+sudo systemctl stop openvswitch-switch
 sudo rm -rf /etc/openvswitch/conf.db
+sudo systemctl start openvswitch-switch
 #  recreate machine-id for EACH compute node in start.sh
 # systemd-machine-id-setup # creates new UUID in /etc/machine-id
 
