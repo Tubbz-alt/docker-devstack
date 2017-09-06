@@ -85,7 +85,7 @@ def create_instance(conn, instance_name, hypervisor_name, network_id,
         debug_print( "os_instance = {0}".format(os_instance) , 3)
         debug_print( "type(os_instance) = {0}".format(type(os_instance)) , 3)
 
-        if False:   #os_instance == None:
+        if type(os_instance) == type(None):
             logprint("ERROR: Server creation failed for:\nserver name: {0}".format(
                 instance_name))
             sys.exit(1)
@@ -103,6 +103,7 @@ def create_instance(conn, instance_name, hypervisor_name, network_id,
     if smoketest:
         os_network = conn.network.find_network(network_id)
         debug_print("os_instance = {0}".format(os_instance), 3)
+        os_instance = s3p.get_server_detail(conn, instance_name)
         smoke_test_server(conn, os_instance, os_network)
 
 def smoke_test_server(conn, os_instance, os_network):

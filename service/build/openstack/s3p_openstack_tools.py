@@ -6,6 +6,7 @@ import errno
 import os
 import hashlib
 import pdb
+from time import sleep
 
 FLAVOR_NAME='cirros256'
 SEC_GRP_NAME='s3p_secgrp'
@@ -128,7 +129,7 @@ def get_server_detail(conn, server_name):
     if len(os_server_list) == 1:
         os_server = os_server_list[0]
     else:
-        logprint("ERROR: server named '{0}' not found".format(server_name))
+        print("ERROR: server named '{0}' not found".format(server_name))
         os_server = None
     return os_server
 
@@ -273,15 +274,25 @@ def create_server_CLI(conn, attrs):
     if response == 0:
         # server creation was successful - return the server object
         os_server = get_server_detail(conn, attrs['name'])
-        while len(os_server.addresses) == 0:
-            # wait for server to obtain an address
-            print("Waiting for OpenStack instance {0} to obtain an IP address".format(attrs['name']))
-            os_server = get_server_detail(conn, attrs['name'])
+        ip_address = wait_for_server_port(conn, os_server, attrs)
+        print("Server {0} obtained ip address: {1}".format(os_server.name, ip_address))
     else:
         os_server = None
         print("ERROR: Openstack CLI failed to create server '{0}'".format(
             attrs['name']))
     return os_server
+
+def wait_for_server_port(conn, os_server, attrs):
+    """waits for an OpenStack server to obtain an IP address"""
+    network_id=attrs['networks'][0]['uuid']
+    network_name = get_network_name(conn, network_id)
+    while len(os_server.addresses) == 0:
+        # wait for server to obtain an address
+        sleep(0.5)
+        print("Waiting for OpenStack instance {0} to obtain an IP address".format(attrs['name']))
+        os_server = get_server_detail(conn, attrs['name'])
+    ip_address = os_server.addresses[network_name][0]['addr']
+    return ip_address
 
 def create_server(conn,
         server_name,
