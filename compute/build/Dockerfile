@@ -43,7 +43,7 @@ RUN     chown -R stack:stack /home/stack && \
 
 WORKDIR /home/stack
 
-LABEL "nodetype=compute" "version=v0.5" "ODL_RELEASE=carbon-snapshot-0.6.1"
+LABEL nodetype="compute" version="v0.5" ODL_RELEASE="carbon-snapshot-0.6.1"
 
 # vim: set ft=dockerfile sw=4 ts=4 :
 
