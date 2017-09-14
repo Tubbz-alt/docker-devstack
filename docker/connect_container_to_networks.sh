@@ -10,7 +10,7 @@ set -e
 function fn_usage {
     echo "Usage:"
     echo "connect_container_to_networks.sh <bridge name> <container ID> <container type>"
-    echo "  where container type is one of {compute, service, measure}
+    echo "  where container type is one of {compute, service, measure}"
     echo
 }
 
@@ -30,6 +30,7 @@ function fn_link_container_netns {
     # derived variables
     SANDBOX_KEY=$(docker inspect -f '{{.NetworkSettings.SandboxKey}}' $CONTAINER_NAME)
     NETNS_NAME="netns-$CONTAINER_NAME"
+    unlink $HOST_NETNS_ROOT/$NETNS_NAME
 
     ln -s $SANDBOX_KEY $HOST_NETNS_ROOT/$NETNS_NAME
     ls -al $HOST_NETNS_ROOT
@@ -37,7 +38,14 @@ function fn_link_container_netns {
 
 function fn_attach_veth_to_container {
     ## Attach veth to container
-    CONTAINER_VETH_NAME="ethphys${A_IX}"
+    echo A_IX=${A_IX}
+    if [ "$A_IX" == "01" ]; then
+        # management network
+        CONTAINER_VETH_NAME=ethmgmt
+    else
+        CONTAINER_VETH_NAME=ethdata
+    fi
+    # CONTAINER_VETH_NAME="ethphys${A_IX}"
     ip link set $VETH_CONT netns $NETNS_NAME
     ip netns exec $NETNS_NAME ip link set dev $VETH_CONT name $CONTAINER_VETH_NAME
     # set the device mac address
@@ -128,6 +136,11 @@ case "$CONTAINER_TYPE" in
         echo "CONTAINER_TYPE = measure"
         CONTAINER_NAME=measure-node
         CONTAINER_ID_NUMBER=4
+        ;;
+    control)
+        echo "CONTAINER_TYPE = control"
+        CONTAINER_NAME=control-node
+        CONTAINER_ID_NUMBER=5
         ;;
     compute)
         echo "CONTAINER_TYPE = compute"

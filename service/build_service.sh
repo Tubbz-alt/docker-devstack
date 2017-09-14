@@ -10,8 +10,8 @@ function tag_and_push_latest {
     docker push $IMAGE_NAME_LATEST
 }
 
-IMAGE_REGISTRY=${IMAGE_REGISTRY:-"matt-registry:4000"}
-IMAGE_REPO=${IMAGE_REPO:-s3p/service}
+IMAGE_REGISTRY=${IMAGE_REGISTRY:-"mattw4"}
+IMAGE_REPO=${IMAGE_REPO:-s3p-service}
 IMAGE_TAG=${IMAGE_TAG:-latest}
 
 if [ -n "$1" ] ; then
@@ -19,7 +19,7 @@ if [ -n "$1" ] ; then
     IMAGE_TAG="$1"
 fi
 IMAGE_NAME=${IMAGE_REGISTRY}/${IMAGE_REPO}:${IMAGE_TAG}
-DOCKERFILE=${DOCKERFILE:-"./build/service.Dockerfile"}
+DOCKERFILE=${DOCKERFILE:-"./build/Dockerfile"}
 
 echo "Building $IMAGE_NAME from Dockerfile=$DOCKERFILE at $(date) ... "
 docker build -t ${IMAGE_NAME} -f ${DOCKERFILE} \
